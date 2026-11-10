@@ -15,6 +15,7 @@ on:
         type: string
         default: '.'
       node-version:
+        description: Version de Node
         type: string
         default: '22'
       test-command:
@@ -22,6 +23,7 @@ on:
         type: string
         default: npm test -- --watch=false
       build-command:
+        description: Commande du build
         type: string
         default: npm run build
       output-path:

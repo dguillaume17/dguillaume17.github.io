@@ -7,6 +7,13 @@
 # - Writes to this repository with the caller's PAGES_TOKEN secret (fine-grained PAT: Contents read and write here).
 # - Each run also removes the caller's sites whose branch no longer exists (listed with the caller's GITHUB_TOKEN,
 #   which needs contents: read).
+# - The site must work under a subfolder: <base href> of its index.html becomes /<repo>/<branch>/, other paths must be
+#   relative. GitHub Pages serves only the root 404.html: deep links of client-side routing fail (prefer # routing).
+# - Build number, build.json, cache busting and badge: see .github/scripts/publish.sh.
+# Direct use, for a technology without its own workflow here: a "build" job uploads the static site as the "site"
+# artifact, then a job "uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main" with the
+# PAGES_TOKEN secret; on a delete event, the same with "action: remove" and "branch: ${{ github.event.ref }}".
+# When a second repository uses the same technology, make it a workflow here, like angular.yml.
 
 name: Publication d'un site
 

@@ -1,6 +1,6 @@
 # dguillaume17.github.io
 
-Site GitHub Pages personnel (servi depuis `main`, à la racine) qui héberge les sites de mes autres repos, et les workflows réutilisables qui les buildent et les publient. Le README explique ce que fait la publication et comment brancher un repo.
+Site GitHub Pages personnel (servi depuis `main`, à la racine) qui héberge les sites de mes autres repos, et les workflows réutilisables qui les buildent et les publient. Le README, minimal, explique comment brancher un repo Angular ; le reste (options, contrat, usage direct de publish.yml) est en tête de chaque workflow et de publish.sh.
 
 ## Contenu
 
@@ -18,7 +18,7 @@ sites.json                         un objet par site : path, repository, source,
 ## Règles
 
 - **Deux étages** : publish.yml ne contient rien de propre à une techno (il reçoit un dossier statique avec `index.html` en artefact) ; tout ce qui est propre à une techno va dans son `<techno>.yml`, qui a des valeurs par défaut pour un projet standard et des entrées pour le reste, et dont l'appelant ne fait que transmettre ses événements (push, delete) et son secret.
-- Ce qui change un contrat (entrées d'un workflow, structure du site, champs de sites.json ou build.json) se reporte dans le README et dans les repos appelants.
+- Ce qui change un contrat (entrées d'un workflow, structure du site, champs de sites.json ou build.json) se reporte dans les commentaires de tête, dans le README s'il en parle, et dans les repos appelants.
 - Les appelants utilisent `@main`, et les workflows de techno appellent `publish.yml@main` : un push sur `main` les change tous à leur prochaine exécution. Tester publish.sh localement avant (dépôt nu comme `origin`, deux clones pour un push concurrent ; un site servi en local pour build-check.html).
 - Un déploiement ne touche que le dossier de son repo : `<repo>/<branche>/`, plus le nettoyage des branches disparues de ce même repo.
 - Les commits de publication arrivent sur `main` en continu : `git pull` avant de modifier quoi que ce soit.
