@@ -1,13 +1,3 @@
-# Reusable workflow for a Blazor WebAssembly repository: builds it and publishes it with publish.yml, or removes the site
-# of a deleted branch. The caller only forwards its events (push, delete) and its PAGES_TOKEN secret: see README.md.
-# - push (or workflow_dispatch): tests, dotnet publish of the Blazor WebAssembly project (found alone when there is one;
-#   project otherwise), then publication of its wwwroot.
-# - delete of a branch: removal of its site.
-# - The build gets the MSBuild properties BuildNumber (github.run_number) and BuildBranch, for an application that shows
-#   them itself; publish.yml also writes them in build.json and the build-number meta.
-# - CompressionEnabled=false: GitHub Pages compresses by itself, and precompressed copies of index.html would miss the
-#   changes publish.sh makes to it.
-
 name: Blazor
 
 on:

@@ -1,10 +1,3 @@
-# Reusable workflow for an Angular repository: builds it and publishes it with publish.yml, or removes the site of a
-# deleted branch. The caller only forwards its events (push, delete) and its PAGES_TOKEN secret: see README.md.
-# - push (or workflow_dispatch): npm ci, tests, build, then publication of the built folder (dist/<project>/browser,
-#   found alone when there is one project; output-path otherwise).
-# - delete of a branch: removal of its site.
-# Defaults fit a project created by ng new (Vitest tests); every step can be changed by an input.
-
 name: Angular
 
 on:
