@@ -28,9 +28,7 @@ jobs:
 
 Le site doit fonctionner dans un sous-dossier : chemins relatifs, routage par `#`.
 
-Build dans le code de l'application, sur la balise `<html>` (absent en local) : `data-index-version` (numéro de la page, présent dès le chargement) ; `data-build-version`, `data-build-branch` et `data-build-date`, lus dans `build.json` et posés un peu après le démarrage.
-
-Build dans le code de l'application, sur la balise `<html>` (absent en local) : `data-index-version` (numéro de la page, présent dès le chargement) ; `data-build-version`, `data-build-branch` et `data-build-date`, lus dans `build.json` et posés un peu après le démarrage.
+Build dans le code de l'application : attributs `data-build-version` (numéro), `data-build-branch` et `data-build-datetime` (date UTC ISO) de la balise `<html>`, présents dès le chargement (absents en local).
 
 ## Inputs (`with:`)
 
