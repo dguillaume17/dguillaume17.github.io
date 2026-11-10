@@ -1,0 +1,114 @@
+# Reusable workflow for a Blazor WebAssembly repository: builds it and publishes it with publish.yml, or removes the site
+# of a deleted branch. The caller only forwards its events (push, delete) and its PAGES_TOKEN secret: see README.md.
+# - push (or workflow_dispatch): tests, dotnet publish of the Blazor WebAssembly project (found alone when there is one;
+#   project otherwise), then publication of its wwwroot.
+# - delete of a branch: removal of its site.
+# - The build gets the MSBuild properties BuildNumber (github.run_number) and BuildBranch, for an application that shows
+#   them itself; publish.yml also writes them in build.json and the build-number meta.
+# - CompressionEnabled=false: GitHub Pages compresses by itself, and precompressed copies of index.html would miss the
+#   changes publish.sh makes to it.
+
+name: Blazor
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: Version du SDK .NET
+        type: string
+        default: 10.0.x
+      project:
+        description: Projet Blazor WebAssembly (.csproj) ; par défaut le seul du repo
+        type: string
+        default: ''
+      test-command:
+        description: Commande des tests ; vide pour ne pas en lancer
+        type: string
+        default: dotnet test -c Release
+      aot:
+        description: Compilation AOT en WebAssembly (code plus rapide, téléchargement plus lourd, publication plus longue)
+        type: boolean
+        default: false
+      publish-args:
+        description: Arguments supplémentaires de dotnet publish
+        type: string
+        default: ''
+      badge:
+        description: Affiche le numéro de build et la branche dans un petit badge en bas à droite du site
+        type: boolean
+        default: true
+    secrets:
+      PAGES_TOKEN:
+        required: true
+    outputs:
+      url:
+        description: Adresse du site publié
+        value: ${{ jobs.publish.outputs.url }}
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Outils de compilation AOT WebAssembly
+        if: inputs.aot
+        run: dotnet workload install wasm-tools
+
+      - name: Tests
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
+
+      - name: Projet Blazor WebAssembly
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: |
+          if [ -z "$PROJECT" ]; then
+            vFound=$(grep -rl --include=*.csproj 'Microsoft.NET.Sdk.BlazorWebAssembly' . || true)
+            if [ "$(printf '%s' "$vFound" | grep -c .)" != 1 ]; then
+              echo "::error::Il faut exactement un projet Blazor WebAssembly (trouvé : ${vFound:-aucun}) ; sinon, donner project."
+              exit 1
+            fi
+            PROJECT=$vFound
+          fi
+          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
+
+      - name: Publish
+        env:
+          BuildBranch: ${{ github.ref_name }}
+          AOT: ${{ inputs.aot }}
+          PUBLISH_ARGS: ${{ inputs.publish-args }}
+        run: |
+          dotnet publish "$PROJECT_PATH" -c Release -o "$RUNNER_TEMP/publish" -p:BuildNumber=$GITHUB_RUN_NUMBER \
+            -p:RunAOTCompilation=$AOT -p:CompressionEnabled=false $PUBLISH_ARGS
+          echo "SITE_PATH=$RUNNER_TEMP/publish/wwwroot" >> "$GITHUB_ENV"
+
+      - name: Dépose le site
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: ${{ env.SITE_PATH }}
+
+  publish:
+    needs: build
+    uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
+    with:
+      badge: ${{ inputs.badge }}
+    secrets:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
+
+  remove:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
+    with:
+      action: remove
+      branch: ${{ github.event.ref }}
+    secrets:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}

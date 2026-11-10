@@ -1,0 +1,99 @@
+# Reusable workflow for a Flutter web repository: builds it and publishes it with publish.yml, or removes the site of a
+# deleted branch. The caller only forwards its events (push, delete) and its PAGES_TOKEN secret: see README.md.
+# - push (or workflow_dispatch): flutter pub get, tests (when a test folder exists), flutter build web, then publication
+#   of build/web. publish.sh points its <base href> to the site's subfolder.
+# - delete of a branch: removal of its site.
+# - --pwa-strategy=none: no service worker, which would keep serving an old build after a publication.
+# - Flutter installed by subosito/flutter-action (stable channel, or flutter-version).
+
+name: Flutter
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Dossier du projet (celui de pubspec.yaml)
+        type: string
+        default: '.'
+      flutter-version:
+        description: Version de Flutter ; vide pour la dernière stable
+        type: string
+        default: ''
+      test-command:
+        description: Commande des tests ; vide pour ne pas en lancer
+        type: string
+        default: if [ -d test ]; then flutter test; fi
+      build-command:
+        description: Commande du build (le site doit sortir dans build/web)
+        type: string
+        default: flutter build web --release --pwa-strategy=none
+      badge:
+        description: Affiche le numéro de build et la branche dans un petit badge en bas à droite du site
+        type: boolean
+        default: true
+    secrets:
+      PAGES_TOKEN:
+        required: true
+    outputs:
+      url:
+        description: Adresse du site publié
+        value: ${{ jobs.publish.outputs.url }}
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ inputs.flutter-version }}
+          cache: true
+
+      - name: Dépendances
+        run: flutter pub get
+
+      - name: Tests
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
+
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      - name: Dossier à publier
+        run: |
+          if [ ! -f build/web/index.html ]; then
+            echo "::error::Pas d'index.html dans build/web."
+            exit 1
+          fi
+          echo "SITE_PATH=$(realpath build/web)" >> "$GITHUB_ENV"
+
+      - name: Dépose le site
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: ${{ env.SITE_PATH }}
+
+  publish:
+    needs: build
+    uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
+    with:
+      badge: ${{ inputs.badge }}
+    secrets:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
+
+  remove:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
+    with:
+      action: remove
+      branch: ${{ github.event.ref }}
+    secrets:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}

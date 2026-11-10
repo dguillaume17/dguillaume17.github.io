@@ -4,10 +4,10 @@ Héberge les sites de mes repos : **[liste des sites publiés](https://dguillaum
 
 Chaque push d'un repo publie le site de sa branche sur `https://dguillaume17.github.io/<repo>/<branche>/`, avec son numéro de build en bas à droite ; supprimer la branche supprime son site.
 
-## Brancher un repo Angular
+## Brancher un repo
 
 1. Ajouter le secret `PAGES_TOKEN` au repo (*Settings → Secrets and variables → Actions*) : un jeton fine-grained limité à `dguillaume17.github.io`, permission *Contents: Read and write*.
-2. Ajouter `.github/workflows/deploy.yml` :
+2. Ajouter `.github/workflows/deploy.yml`, avec le workflow de sa techno :
 
 ```yaml
 name: Build et publication
@@ -24,4 +24,11 @@ jobs:
       PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
 ```
 
-Exemple : [code-lab](https://github.com/dguillaume17/code-lab). Les options de chaque workflow sont décrites en tête de son fichier, dans `.github/workflows/`.
+| Techno | Workflow |
+|---|---|
+| Angular | `angular.yml` |
+| Blazor WebAssembly | `blazor.yml` |
+| React (Vite) | `react.yml` |
+| Flutter web | `flutter.yml` |
+
+Les options de chaque workflow (`with:`) sont décrites en tête de son fichier, dans `.github/workflows/`.
