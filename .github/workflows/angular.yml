@@ -1,0 +1,110 @@
+# Reusable workflow for an Angular repository: builds it and publishes it with publish.yml, or removes the site of a
+# deleted branch. The caller only forwards its events (push, delete) and its PAGES_TOKEN secret: see README.md.
+# - push (or workflow_dispatch): npm ci, tests, build, then publication of the built folder (dist/<project>/browser,
+#   found alone when there is one project; output-path otherwise).
+# - delete of a branch: removal of its site.
+# Defaults fit a project created by ng new (Vitest tests); every step can be changed by an input.
+
+name: Angular
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Dossier du projet Angular (celui de package.json)
+        type: string
+        default: '.'
+      node-version:
+        type: string
+        default: '22'
+      test-command:
+        description: Commande des tests ; vide pour ne pas en lancer
+        type: string
+        default: npm test -- --watch=false
+      build-command:
+        type: string
+        default: npm run build
+      output-path:
+        description: Dossier buildé à publier, relatif à working-directory ; par défaut le seul dist/*/browser
+        type: string
+        default: ''
+      badge:
+        description: Affiche le numéro de build et la branche dans un petit badge en bas à droite du site
+        type: boolean
+        default: true
+    secrets:
+      PAGES_TOKEN:
+        required: true
+    outputs:
+      url:
+        description: Adresse du site publié
+        value: ${{ jobs.publish.outputs.url }}
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Tests
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
+
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      - name: Dossier à publier
+        env:
+          OUTPUT_PATH: ${{ inputs.output-path }}
+        run: |
+          if [ -z "$OUTPUT_PATH" ]; then
+            vFound=$(find dist -mindepth 2 -maxdepth 2 -type d -name browser 2>/dev/null)
+            if [ "$(printf '%s' "$vFound" | grep -c .)" != 1 ]; then
+              echo "::error::Il faut exactement un dossier dist/*/browser (trouvé : ${vFound:-aucun}) ; sinon, donner output-path."
+              exit 1
+            fi
+            OUTPUT_PATH=$vFound
+          fi
+          if [ ! -f "$OUTPUT_PATH/index.html" ]; then
+            echo "::error::Pas d'index.html dans $OUTPUT_PATH."
+            exit 1
+          fi
+          echo "SITE_PATH=$(realpath "$OUTPUT_PATH")" >> "$GITHUB_ENV"
+
+      - name: Dépose le site
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: ${{ env.SITE_PATH }}
+
+  publish:
+    needs: build
+    uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
+    with:
+      badge: ${{ inputs.badge }}
+    secrets:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
+
+  remove:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
+    with:
+      action: remove
+      branch: ${{ github.event.ref }}
+    secrets:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}

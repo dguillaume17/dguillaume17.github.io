@@ -1,7 +1,9 @@
 # Reusable workflow: publishes the site built by a caller repository on https://dguillaume17.github.io/<repo>/<branch>/,
 # or removes it. The caller builds (with its own tools) and uploads a static site as an artifact; this workflow does
 # the rest, the same for every repository: see .github/scripts/publish.sh, and README.md for how to call it.
-# - Runs in the caller's run: github.repository, github.ref_name, its artifacts and its GITHUB_TOKEN are the caller's.
+# - Called by the caller repository, or by a workflow per technology of this repository (angular.yml…) that builds first.
+# - Runs in the caller's run: github.repository, github.ref_name, github.run_number (the build number), its artifacts
+#   and its GITHUB_TOKEN are the caller's.
 # - Writes to this repository with the caller's PAGES_TOKEN secret (fine-grained PAT: Contents read and write here).
 # - Each run also removes the caller's sites whose branch no longer exists (listed with the caller's GITHUB_TOKEN,
 #   which needs contents: read).
@@ -23,6 +25,10 @@ on:
         description: Branche du site ; par défaut celle de l'exécution (à donner pour un événement delete)
         type: string
         default: ''
+      badge:
+        description: Affiche le numéro de build et la branche dans un petit badge en bas à droite du site
+        type: boolean
+        default: true
     secrets:
       PAGES_TOKEN:
         required: true
@@ -46,6 +52,8 @@ jobs:
       BRANCH: ${{ inputs.branch || github.ref_name }}
       PAGES_URL: https://dguillaume17.github.io
       COMMIT_SHA: ${{ github.sha }}
+      BUILD_NUMBER: ${{ github.run_number }}
+      BADGE: ${{ inputs.badge }}
     steps:
       - name: Récupère le site buildé
         if: inputs.action == 'deploy'

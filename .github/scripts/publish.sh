@@ -7,17 +7,35 @@
 #   publish.sh remove <owner/repo> <branch>
 #
 # - A site lives in <repo>/<branch>/, both names slugged: lowercase, every run of other characters than a-z0-9 becomes "-".
-# - deploy: replaces the folder with site-dir, and points <base href> of its index.html to the folder.
+# - deploy: replaces the folder with site-dir and writes its build.json (number, branch, commit, date); in its index.html:
+#   - points <base href> to the folder;
+#   - adds ?build=<number> to the local files it references (relative href/src without query): never served from cache;
+#   - injects build-check.html before </head>: build number meta, reload of a stale cached page, build badge.
 # - sites.json lists every published site (index.html displays it); each change updates it.
 # - Cleanup: when EXISTING_BRANCHES_FILE names a file listing the caller's branches (one per line), the caller's sites
 #   whose branch no longer exists are removed too. Only the caller's folder is ever touched.
 # - Another run may push in the meantime: the change is applied again on the new main, a few times.
-# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA (deploy), EXISTING_BRANCHES_FILE (optional),
-# GITHUB_OUTPUT and GITHUB_STEP_SUMMARY (optional).
+# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA and BUILD_NUMBER (deploy), BADGE (deploy, true or
+# false, default true), EXISTING_BRANCHES_FILE (optional), GITHUB_OUTPUT and GITHUB_STEP_SUMMARY (optional).
 set -euo pipefail
 
 slug() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+# Build number, cache busting and build check in the index.html of the deployed site.
+prepare_index() {
+  local vIndex="$SITE_PATH/index.html"
+  sed -i -E "s|<base href=\"[^\"]*\"|<base href=\"/$SITE_PATH/\"|" "$vIndex"
+  BUILD_NUMBER=$BUILD_NUMBER perl -pi -e \
+    's/(?<=\s)(href|src)="(?![a-zA-Z][a-zA-Z0-9+.-]*:|\/|#)([^"?#]+)"/$1="$2?build=$ENV{BUILD_NUMBER}"/g' "$vIndex"
+  if grep -qi '</head>' "$vIndex"; then
+    SNIPPET=$BUILD_CHECK BUILD_NUMBER=$BUILD_NUMBER BUILD_JSON=$BUILD_JSON perl -0pi -e \
+      '(my $s = $ENV{SNIPPET}) =~ s/__BUILD_NUMBER__/$ENV{BUILD_NUMBER}/g; $s =~ s/__BUILD_JSON__/$ENV{BUILD_JSON}/g;
+       s/<\/head>/$s\n  <\/head>/i' "$vIndex"
+  else
+    echo "::warning::index.html sans </head> : pas de vérification du build ni de badge."
+  fi
 }
 
 # Applies the change to the working tree.
@@ -28,15 +46,15 @@ apply_change() {
     rm -rf "$SITE_PATH"
     mkdir -p "$SITE_PATH"
     cp -a "$SITE_DIR"/. "$SITE_PATH"/
-    if [ -f "$SITE_PATH/index.html" ]; then
-      sed -i -E "s|<base href=\"[^\"]*\"|<base href=\"/$SITE_PATH/\"|" "$SITE_PATH/index.html"
-    fi
+    prepare_index
+    jq -n --argjson number "$BUILD_NUMBER" --arg branch "$BRANCH" --arg commit "$COMMIT_SHA" --arg date "$UPDATED_AT" \
+       '{number: $number, branch: $branch, commit: $commit, date: $date}' > "$SITE_PATH/build.json"
     jq --arg path "$SITE_PATH" --arg repository "$REPOSITORY_SLUG" --arg source "$REPOSITORY" \
        --arg branch "$BRANCH" --arg url "$PAGES_URL/$SITE_PATH/" --arg commit "$COMMIT_SHA" \
-       --arg updatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+       --argjson build "$BUILD_NUMBER" --arg updatedAt "$UPDATED_AT" \
        '[.[] | select(.path != $path)]
         + [{path: $path, repository: $repository, source: $source, branch: $branch, url: $url,
-            commit: $commit, updatedAt: $updatedAt}]
+            commit: $commit, build: $build, updatedAt: $updatedAt}]
         | sort_by(.path)' sites.json > sites.json.tmp
     mv sites.json.tmp sites.json
   else
@@ -78,6 +96,15 @@ main() {
     deploy)
       SITE_DIR=${4:?dossier du site manquant}
       : "${PAGES_URL:?PAGES_URL manquant}" "${COMMIT_SHA:?COMMIT_SHA manquant}"
+      if ! [[ "${BUILD_NUMBER:-}" =~ ^[0-9]+$ ]]; then
+        echo "::error::BUILD_NUMBER doit être un nombre : ${BUILD_NUMBER:-(vide)}."
+        exit 1
+      fi
+      BADGE=${BADGE:-true}
+      if [ "$BADGE" != true ] && [ "$BADGE" != false ]; then
+        echo "::error::BADGE doit valoir true ou false : $BADGE."
+        exit 1
+      fi
       if [ ! -f "$SITE_DIR/index.html" ]; then
         echo "::error::Le site à publier n'a pas d'index.html à sa racine ($SITE_DIR)."
         exit 1
@@ -97,10 +124,17 @@ main() {
     exit 1
   fi
   SITE_PATH="$REPOSITORY_SLUG/$BRANCH_SLUG"
+  UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  if [ "$ACTION" = deploy ]; then
+    # Read once: a retry resets the clone, this script's folder included. "<" escaped: the JSON goes in a <script>.
+    BUILD_CHECK=$(cat "$(dirname "${BASH_SOURCE[0]}")/build-check.html")
+    BUILD_JSON=$(jq -cn --argjson number "$BUILD_NUMBER" --arg branch "$BRANCH" --arg commit "$COMMIT_SHA" \
+      --argjson badge "$BADGE" '{number: $number, branch: $branch, commit: $commit, badge: $badge}' | sed 's/</\\u003c/g')
+  fi
 
   local vMessage
   if [ "$ACTION" = deploy ]; then
-    vMessage="Publie $SITE_PATH ($REPOSITORY@${COMMIT_SHA:0:7})"
+    vMessage="Publie $SITE_PATH, build n° $BUILD_NUMBER ($REPOSITORY@${COMMIT_SHA:0:7})"
   else
     vMessage="Supprime $SITE_PATH (branche $BRANCH de $REPOSITORY supprimée)"
   fi
@@ -129,7 +163,7 @@ main() {
   done
 
   if [ "$ACTION" = deploy ]; then
-    echo "Site de la branche \`$BRANCH\` : $PAGES_URL/$SITE_PATH/" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+    echo "Site de la branche \`$BRANCH\` (build n° $BUILD_NUMBER) : $PAGES_URL/$SITE_PATH/" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
     echo "url=$PAGES_URL/$SITE_PATH/" >> "${GITHUB_OUTPUT:-/dev/null}"
   else
     echo "Site de la branche \`$BRANCH\` supprimé ($SITE_PATH/)." | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"

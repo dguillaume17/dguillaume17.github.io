@@ -1,0 +1,45 @@
+    <meta name="build-number" content="__BUILD_NUMBER__" />
+    <script>
+      // Injected at the end of <head> by dguillaume17.github.io at publication (.github/scripts/publish.sh).
+      // - GitHub Pages lets browsers cache a page for up to 10 minutes (Safari on iOS sometimes longer): when build.json,
+      //   read without cache, announces another build, the page reloads with ?build=N, a URL never cached (once: no loop).
+      // - Shows the build number and the branch in a small badge, unless the caller disabled it (badge: false).
+      (function (pBuild) {
+        fetch("build.json?t=" + Date.now(), { cache: "no-store" })
+          .then(function (pResponse) {
+            return pResponse.ok ? pResponse.json() : null;
+          })
+          .then(function (pLatest) {
+            if (!pLatest || pLatest.number === pBuild.number) {
+              return;
+            }
+            var vUrl = new URL(window.location.href);
+            if (vUrl.searchParams.get("build") === String(pLatest.number)) {
+              return;
+            }
+            vUrl.searchParams.set("build", pLatest.number);
+            window.location.replace(vUrl.toString());
+          })
+          .catch(function () {});
+
+        if (!pBuild.badge) {
+          return;
+        }
+        function showBadge() {
+          var vBadge = document.createElement("div");
+          vBadge.textContent = "n° " + pBuild.number + " · " + pBuild.branch;
+          vBadge.title = "Build " + pBuild.number + ", branche " + pBuild.branch + ", commit " + pBuild.commit.slice(0, 7);
+          vBadge.setAttribute(
+            "style",
+            "position:fixed;right:8px;bottom:8px;z-index:2147483647;padding:2px 8px;border-radius:10px;" +
+              "background:rgba(0,0,0,.6);color:#fff;font:11px/1.6 system-ui,sans-serif;pointer-events:none"
+          );
+          document.body.appendChild(vBadge);
+        }
+        if (document.body) {
+          showBadge();
+        } else {
+          document.addEventListener("DOMContentLoaded", showBadge);
+        }
+      })(__BUILD_JSON__);
+    </script>

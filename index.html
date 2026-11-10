@@ -163,7 +163,8 @@
             if (isMain(fSite)) {
               vLink.after(element("span", "principale", "badge"));
             }
-            const vMeta = element("span", vDateFormat.format(new Date(fSite.updatedAt)) + " · ", "meta");
+            const vBuild = fSite.build === undefined ? "" : "n° " + fSite.build + " · ";
+            const vMeta = element("span", vBuild + vDateFormat.format(new Date(fSite.updatedAt)) + " · ", "meta");
             vMeta.append(element("code", fSite.commit.slice(0, 7)));
             vItem.append(vMeta);
             vList.append(vItem);
@@ -173,7 +174,8 @@
         }
       }
 
-      fetch("sites.json", { cache: "no-store" })
+      // New URL each time: neither the browser nor the GitHub Pages CDN serve it from their cache.
+      fetch("sites.json?t=" + Date.now(), { cache: "no-store" })
         .then((pResponse) => {
           if (!pResponse.ok) {
             throw new Error("HTTP " + pResponse.status);
