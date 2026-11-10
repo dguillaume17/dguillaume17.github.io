@@ -8,7 +8,7 @@ GitHub Pages user site, served from `main` at the root. Hosts the sites of the o
 .github/workflows/publish.yml      common reusable workflow (workflow_call): deploy or remove the site of one branch of the caller
 .github/workflows/<tech>.yml       one per technology (angular, blazor, react, flutter): build then publish.yml, or remove, depending on the caller's event
 .github/scripts/publish.sh         the publication itself, run by publish.yml
-.github/scripts/build-check.html   snippet injected at the end of <head> of every published site
+build-check.js                     shared script loaded by every published site (served at /build-check.js)
 index.html                         list of the sites, rendered from sites.json
 sites.json                         one object per site: path, repository, source, branch, url, commit, build, updatedAt
 .nojekyll                          without it GitHub ignores folders starting with _ (Blazor's _framework)
@@ -23,11 +23,12 @@ sites.json                         one object per site: path, repository, source
 - It clones this repository with `PAGES_TOKEN` (caller's secret: fine-grained PAT, Contents read and write on this repository only), lists the caller's branches with the caller's `GITHUB_TOKEN` (needs `contents: read`; on API error, no cleanup), and runs publish.sh.
 - publish.sh (`deploy|remove <owner/repo> <branch> [site-dir]`; env `PAGES_URL`, `COMMIT_SHA`, `BUILD_NUMBER`, `BADGE`, `EXISTING_BRANCHES_FILE`):
   - folder `<repo>/<branch>/`, both slugged: lowercase, every run of characters other than `a-z0-9` becomes `-` (`feature/Form` → `feature-form`); two branches with the same slug share a folder;
-  - deploy: replaces the folder, writes `build.json` (number, branch, commit, date); in `index.html`: `<base href>` → `/<repo>/<branch>/`, `?build=<number>` added to relative `href`/`src` without query, build-check.html injected before `</head>`;
+  - deploy: replaces the folder, writes `build.json` (number, branch, commit, date); in `index.html`: `<base href>` → `/<repo>/<branch>/`, `?build=<number>` added to relative `href`/`src` without query, `data-index-version="<number>"` added to `<html>`, `<script src="/build-check.js" data-badge="true|false">` injected before `</head>`;
   - remove: deletes the folder;
   - both: removes the caller's folders whose branch no longer exists (only the caller's folder, never another repository's), updates `sites.json`, commits (« Publie <path>, build n° N (...) » / « Supprime <path> (...) ») and pushes to `main`; when `main` moved meanwhile, resets and applies again (5 attempts).
-- build-check.html: `<meta name="build-number">`; fetches `build.json?t=…` without cache and, when it announces another build, reloads once with `?build=<number>` (a URL never cached; no loop); shows a small fixed badge « n° N · branch » bottom right unless `badge: false`. An application can read the meta or `build.json` to show the number itself.
-- Cache: GitHub Pages serves everything with `max-age=600` (browser and CDN); headers cannot be changed. Only new URLs bypass it: `?build=` on assets, `sites.json?t=` in index.html. The first publication of a site, or a page cached before build-check.html existed, can stay stale up to ~10 minutes.
+- build-check.js (one file for every site; a change applies to all of them without republishing, within the 10-minute cache): fetches `build.json?t=<ISO date-time>` without cache, sets `data-build-version` and `data-build-branch` on `<html>`; when `data-index-version` < `data-build-version` the page came from a cache: reloads once with `?build=<number>` (a URL never cached; if the URL already has it, keeps the page: no loop); otherwise shows a small fixed badge « n° <index version> · <branch> » bottom right unless `data-badge="false"`. `build.json` is fetched relative to the page's `<base href>`, i.e. the site's folder.
+- Build number in an application: read `document.documentElement.dataset.indexVersion` (attribute `data-index-version`, present before the application starts; the version of the code running). `data-build-version` is the version online, set later (asynchronously). Absent locally (no publication): show e.g. `dev`. An application showing it should set `badge: false`.
+- Cache: GitHub Pages serves everything with `max-age=600` (browser and CDN); headers cannot be changed. Only new URLs bypass it: `?build=` on assets, `sites.json?t=` in index.html. The first publication of a site, or a page cached before build-check.js was referenced, can stay stale up to ~10 minutes.
 - Constraints on a published site: works under a subfolder (relative paths; `<base href>` is rewritten; absolute `/…` paths written in the code are not); GitHub Pages serves only the root `404.html`, so client-side routing by path breaks deep links: use `#` routing.
 
 ## Technology notes
@@ -53,7 +54,7 @@ A technology without a workflow can also call publish.yml directly: a `build` jo
 
 ## Rules
 
-- Callers use `@main`: a push to `main` changes every caller at its next run. Test publish.sh locally first (bare repo as `origin`, two clones for a concurrent push; build-check.html on a site served locally with Playwright).
+- Callers use `@main`: a push to `main` changes every caller at its next run. Test publish.sh locally first (bare repo as `origin`, two clones for a concurrent push; build-check.js on a site served locally from the clone's root, with Playwright).
 - Publication commits land on `main` continuously: `git pull` before any change.
 - A change of contract (workflow inputs, site layout, fields of sites.json or build.json) goes into this file, the README when it lists it, and the caller repositories.
 - Workflow files have no comments; their documentation is this file.

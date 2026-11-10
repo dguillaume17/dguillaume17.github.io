@@ -28,6 +28,10 @@ jobs:
 
 Le site doit fonctionner dans un sous-dossier : chemins relatifs, routage par `#`.
 
+Numéro de build dans le code de l'application : attribut `data-index-version` de la balise `<html>` (absent en local).
+
+Numéro de build dans le code de l'application : attribut `data-index-version` de la balise `<html>` (absent en local).
+
 ## Inputs (`with:`)
 
 Tous facultatifs. Pour tous : `badge` (`true`) affiche le numéro de build et la branche.

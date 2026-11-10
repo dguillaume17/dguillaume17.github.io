@@ -10,7 +10,8 @@
 # - deploy: replaces the folder with site-dir and writes its build.json (number, branch, commit, date); in its index.html:
 #   - points <base href> to the folder;
 #   - adds ?build=<number> to the local files it references (relative href/src without query): never served from cache;
-#   - injects build-check.html before </head>: build number meta, reload of a stale cached page, build badge.
+#   - adds data-index-version="<number>" to <html> and, before </head>, <script src="/build-check.js"> (shared file at
+#     the root of this repository): reload of a stale cached page, data-build-version / data-build-branch, badge.
 # - sites.json lists every published site (index.html displays it); each change updates it.
 # - Cleanup: when EXISTING_BRANCHES_FILE names a file listing the caller's branches (one per line), the caller's sites
 #   whose branch no longer exists are removed too. Only the caller's folder is ever touched.
@@ -29,12 +30,12 @@ prepare_index() {
   sed -i -E "s|<base href=\"[^\"]*\"|<base href=\"/$SITE_PATH/\"|" "$vIndex"
   BUILD_NUMBER=$BUILD_NUMBER perl -pi -e \
     's/(?<=\s)(href|src)="(?![a-zA-Z][a-zA-Z0-9+.-]*:|\/|#)([^"?#]+)"/$1="$2?build=$ENV{BUILD_NUMBER}"/g' "$vIndex"
-  if grep -qi '</head>' "$vIndex"; then
-    SNIPPET=$BUILD_CHECK BUILD_NUMBER=$BUILD_NUMBER BUILD_JSON=$BUILD_JSON perl -0pi -e \
-      '(my $s = $ENV{SNIPPET}) =~ s/__BUILD_NUMBER__/$ENV{BUILD_NUMBER}/g; $s =~ s/__BUILD_JSON__/$ENV{BUILD_JSON}/g;
-       s/<\/head>/$s\n  <\/head>/i' "$vIndex"
+  if grep -qiE '<html[ >]' "$vIndex" && grep -qi '</head>' "$vIndex"; then
+    BUILD_NUMBER=$BUILD_NUMBER BADGE=$BADGE perl -0pi -e \
+      's/<html(?=[\s>])/<html data-index-version="$ENV{BUILD_NUMBER}"/i;
+       s/<\/head>/  <script src="\/build-check.js" data-badge="$ENV{BADGE}"><\/script>\n  <\/head>/i' "$vIndex"
   else
-    echo "::warning::index.html sans </head> : pas de vérification du build ni de badge."
+    echo "::warning::index.html sans <html> ou </head> : pas de numéro de version ni de vérification du build."
   fi
 }
 
@@ -125,12 +126,6 @@ main() {
   fi
   SITE_PATH="$REPOSITORY_SLUG/$BRANCH_SLUG"
   UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  if [ "$ACTION" = deploy ]; then
-    # Read once: a retry resets the clone, this script's folder included. "<" escaped: the JSON goes in a <script>.
-    BUILD_CHECK=$(cat "$(dirname "${BASH_SOURCE[0]}")/build-check.html")
-    BUILD_JSON=$(jq -cn --argjson number "$BUILD_NUMBER" --arg branch "$BRANCH" --arg commit "$COMMIT_SHA" \
-      --argjson badge "$BADGE" '{number: $number, branch: $branch, commit: $commit, badge: $badge}' | sed 's/</\\u003c/g')
-  fi
 
   local vMessage
   if [ "$ACTION" = deploy ]; then
