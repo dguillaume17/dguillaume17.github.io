@@ -2,7 +2,7 @@
 
 Héberge les sites de mes repos : **[liste des sites publiés](https://dguillaume17.github.io/)**.
 
-Chaque push d'un repo publie le site de sa branche sur `https://dguillaume17.github.io/<repo>/<branche>/`, avec son numéro de build en bas à droite ; supprimer la branche supprime son site.
+Chaque push d'un repo publie le site de sa branche sur `https://dguillaume17.github.io/<repo>/<branche>/` ; supprimer la branche supprime son site.
 
 ## Brancher un repo
 
@@ -32,7 +32,7 @@ Build dans le code de l'application : attributs `data-build-version` (numéro), 
 
 ## Inputs (`with:`)
 
-Tous facultatifs. Pour tous : `badge` (`true`) affiche le numéro de build et la branche.
+Tous facultatifs.
 
 | Workflow | Input | Défaut |
 |---|---|---|

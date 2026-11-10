@@ -19,10 +19,6 @@ on:
         description: Commande du build (le site doit sortir dans build/web)
         type: string
         default: flutter build web --release --pwa-strategy=none
-      badge:
-        description: Affiche le numéro de build et la branche dans un petit badge en bas à droite du site
-        type: boolean
-        default: true
     secrets:
       PAGES_TOKEN:
         required: true
@@ -76,8 +72,6 @@ jobs:
   publish:
     needs: build
     uses: dguillaume17/dguillaume17.github.io/.github/workflows/publish.yml@main
-    with:
-      badge: ${{ inputs.badge }}
     secrets:
       PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
 

@@ -14,13 +14,11 @@
 #     information, static in the page;
 #   - adds <script src="/cache-verification.js"> before </head> (shared file at the root of this repository): reloads
 #     the page when it comes from a cache;
-#   - unless BADGE is false, adds before </body> a small fixed badge « n° <number> · <branch> ».
 # - sites.json lists every published site (index.html displays it); each change updates it.
 # - Cleanup: when EXISTING_BRANCHES_FILE names a file listing the caller's branches (one per line), the caller's sites
 #   whose branch no longer exists are removed too. Only the caller's folder is ever touched.
 # - Another run may push in the meantime: the change is applied again on the new main, a few times.
-# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA and BUILD_NUMBER (deploy), BADGE (deploy, true or
-# false, default true), EXISTING_BRANCHES_FILE (optional), GITHUB_OUTPUT and GITHUB_STEP_SUMMARY (optional).
+# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA and BUILD_NUMBER (deploy), EXISTING_BRANCHES_FILE (optional), GITHUB_OUTPUT and GITHUB_STEP_SUMMARY (optional).
 set -euo pipefail
 
 slug() {
@@ -33,19 +31,14 @@ prepare_index() {
   sed -i -E "s|<base href=\"[^\"]*\"|<base href=\"/$SITE_PATH/\"|" "$vIndex"
   BUILD_NUMBER=$BUILD_NUMBER perl -pi -e \
     's/(?<=\s)(href|src)="(?![a-zA-Z][a-zA-Z0-9+.-]*:|\/|#)([^"?#]+)"/$1="$2?build=$ENV{BUILD_NUMBER}"/g' "$vIndex"
-  if grep -qiE '<html[ >]' "$vIndex" && grep -qi '</head>' "$vIndex" && grep -qi '</body>' "$vIndex"; then
-    BUILD_NUMBER=$BUILD_NUMBER BRANCH=$BRANCH UPDATED_AT=$UPDATED_AT BADGE=$BADGE perl -0pi -e '
+  if grep -qiE '<html[ >]' "$vIndex" && grep -qi '</head>' "$vIndex"; then
+    BUILD_NUMBER=$BUILD_NUMBER BRANCH=$BRANCH UPDATED_AT=$UPDATED_AT perl -0pi -e '
       sub escape { my $v = shift; $v =~ s/&/&amp;/g; $v =~ s/"/&quot;/g; $v =~ s/</&lt;/g; $v =~ s/>/&gt;/g; return $v }
       my $branch = escape($ENV{BRANCH});
       s/<html(?=[\s>])/<html data-build-version="$ENV{BUILD_NUMBER}" data-build-branch="$branch" data-build-datetime="$ENV{UPDATED_AT}"/i;
-      s/<\/head>/  <script src="\/cache-verification.js"><\/script>\n  <\/head>/i;
-      if ($ENV{BADGE} eq "true") {
-        my $style = "position:fixed;right:8px;bottom:8px;z-index:2147483647;padding:2px 8px;border-radius:10px;"
-          . "background:rgba(0,0,0,.6);color:#fff;font:11px\/1.6 system-ui,sans-serif;pointer-events:none";
-        s/<\/body>/  <div data-build-badge style="$style">n° $ENV{BUILD_NUMBER} · $branch<\/div>\n  <\/body>/i;
-      }' "$vIndex"
+      s/<\/head>/  <script src="\/cache-verification.js"><\/script>\n  <\/head>/i;' "$vIndex"
   else
-    echo "::warning::index.html sans <html>, </head> ou </body> : pas d'informations de build ni de vérification du cache."
+    echo "::warning::index.html sans <html> ou </head> : pas d'informations de build ni de vérification du cache."
   fi
 }
 
@@ -108,11 +101,6 @@ main() {
       : "${PAGES_URL:?PAGES_URL manquant}" "${COMMIT_SHA:?COMMIT_SHA manquant}"
       if ! [[ "${BUILD_NUMBER:-}" =~ ^[0-9]+$ ]]; then
         echo "::error::BUILD_NUMBER doit être un nombre : ${BUILD_NUMBER:-(vide)}."
-        exit 1
-      fi
-      BADGE=${BADGE:-true}
-      if [ "$BADGE" != true ] && [ "$BADGE" != false ]; then
-        echo "::error::BADGE doit valoir true ou false : $BADGE."
         exit 1
       fi
       if [ ! -f "$SITE_DIR/index.html" ]; then

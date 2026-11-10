@@ -15,10 +15,6 @@ on:
         description: Branche du site ; par défaut celle de l'exécution (à donner pour un événement delete)
         type: string
         default: ''
-      badge:
-        description: Affiche le numéro de build et la branche dans un petit badge en bas à droite du site
-        type: boolean
-        default: true
     secrets:
       PAGES_TOKEN:
         required: true
@@ -41,7 +37,6 @@ jobs:
       PAGES_URL: https://dguillaume17.github.io
       COMMIT_SHA: ${{ github.sha }}
       BUILD_NUMBER: ${{ github.run_number }}
-      BADGE: ${{ inputs.badge }}
     steps:
       - name: Récupère le site buildé
         if: inputs.action == 'deploy'
