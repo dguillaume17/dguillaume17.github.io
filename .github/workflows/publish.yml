@@ -1,0 +1,84 @@
+# Reusable workflow: publishes the site built by a caller repository on https://dguillaume17.github.io/<repo>/<branch>/,
+# or removes it. The caller builds (with its own tools) and uploads a static site as an artifact; this workflow does
+# the rest, the same for every repository: see .github/scripts/publish.sh, and README.md for how to call it.
+# - Runs in the caller's run: github.repository, github.ref_name, its artifacts and its GITHUB_TOKEN are the caller's.
+# - Writes to this repository with the caller's PAGES_TOKEN secret (fine-grained PAT: Contents read and write here).
+# - Each run also removes the caller's sites whose branch no longer exists (listed with the caller's GITHUB_TOKEN,
+#   which needs contents: read).
+
+name: Publication d'un site
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: deploy (publie l'artefact) ou remove (supprime le site de la branche)
+        type: string
+        default: deploy
+      artifact:
+        description: Nom de l'artefact qui contient le site buildé (avec son index.html à la racine)
+        type: string
+        default: site
+      branch:
+        description: Branche du site ; par défaut celle de l'exécution (à donner pour un événement delete)
+        type: string
+        default: ''
+    secrets:
+      PAGES_TOKEN:
+        required: true
+    outputs:
+      url:
+        description: Adresse du site publié
+        value: ${{ jobs.publish.outputs.url }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # One change at a time for a given site; sites of other branches or repositories are pushed at the same time
+    # (publish.sh retries when main changed in the meantime).
+    concurrency:
+      group: pages-${{ github.repository }}-${{ inputs.branch || github.ref_name }}
+      cancel-in-progress: false
+    outputs:
+      url: ${{ steps.publish.outputs.url }}
+    env:
+      ACTION: ${{ inputs.action }}
+      BRANCH: ${{ inputs.branch || github.ref_name }}
+      PAGES_URL: https://dguillaume17.github.io
+      COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Récupère le site buildé
+        if: inputs.action == 'deploy'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/site
+
+      - name: Clone dguillaume17.github.io
+        uses: actions/checkout@v4
+        with:
+          repository: dguillaume17/dguillaume17.github.io
+          ref: main
+          token: ${{ secrets.PAGES_TOKEN }}
+          path: pages
+
+      # Without the list (API error), no cleanup: a site is never removed by mistake.
+      - name: Branches existantes du repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh api "repos/$GITHUB_REPOSITORY/branches" --paginate --jq '.[].name' > "$RUNNER_TEMP/branches.txt"; then
+            echo "::warning::Liste des branches indisponible : pas de nettoyage des sites des branches supprimées."
+            rm -f "$RUNNER_TEMP/branches.txt"
+          fi
+
+      - name: Publie
+        id: publish
+        working-directory: pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -s "$RUNNER_TEMP/branches.txt" ]; then
+            export EXISTING_BRANCHES_FILE="$RUNNER_TEMP/branches.txt"
+          fi
+          .github/scripts/publish.sh "$ACTION" "$GITHUB_REPOSITORY" "$BRANCH" "$RUNNER_TEMP/site"

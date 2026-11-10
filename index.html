@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- Lists the sites published by .github/workflows/publish.yml, read from sites.json (one entry per repository and branch). -->
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sites publiés</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --muted: #59636e;
+        --border: #d1d9e0;
+        --card: #f6f8fa;
+        --accent: #0969da;
+        --badge-bg: #dafbe1;
+        --badge-fg: #1a7f37;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d1117;
+          --fg: #e6edf3;
+          --muted: #9198a1;
+          --border: #3d444d;
+          --card: #151b23;
+          --accent: #4493f8;
+          --badge-bg: #12261e;
+          --badge-fg: #3fb950;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+      main {
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+      h1 {
+        margin: 0 0 0.25rem;
+        font-size: 1.75rem;
+      }
+      .intro,
+      .status {
+        color: var(--muted);
+      }
+      section {
+        margin-top: 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--card);
+        overflow: hidden;
+      }
+      h2 {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        font-size: 1.1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      h2 a {
+        margin-left: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 400;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 1rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg);
+      }
+      li + li {
+        border-top: 1px solid var(--border);
+      }
+      .branch {
+        font-weight: 600;
+        word-break: break-all;
+      }
+      .badge {
+        margin-left: 0.5rem;
+        padding: 0 0.4rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: var(--badge-bg);
+        color: var(--badge-fg);
+      }
+      .meta {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      a {
+        color: var(--accent);
+      }
+      code {
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sites publiés</h1>
+      <p class="intro">Un site par repo et par branche, publié automatiquement à chaque push et supprimé avec sa branche.</p>
+      <div id="sites"><p class="status">Chargement…</p></div>
+    </main>
+    <script>
+      const vContainer = document.getElementById("sites");
+
+      function element(pTag, pText, pClassName) {
+        const vElement = document.createElement(pTag);
+        if (pText !== undefined) {
+          vElement.textContent = pText;
+        }
+        if (pClassName) {
+          vElement.className = pClassName;
+        }
+        return vElement;
+      }
+
+      function isMain(pSite) {
+        return pSite.branch === "main" || pSite.branch === "master";
+      }
+
+      function render(pSites) {
+        vContainer.replaceChildren();
+        if (pSites.length === 0) {
+          vContainer.append(element("p", "Aucun site publié pour l'instant.", "status"));
+          return;
+        }
+        const vRepositories = new Map();
+        for (const fSite of pSites) {
+          if (!vRepositories.has(fSite.repository)) {
+            vRepositories.set(fSite.repository, []);
+          }
+          vRepositories.get(fSite.repository).push(fSite);
+        }
+        const vDateFormat = new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" });
+        for (const [fRepository, fSites] of [...vRepositories].sort((pA, pB) => pA[0].localeCompare(pB[0]))) {
+          fSites.sort((pA, pB) => Number(isMain(pB)) - Number(isMain(pA)) || pA.branch.localeCompare(pB.branch));
+          const vSection = element("section");
+          const vTitle = element("h2", fRepository);
+          const vSource = element("a", fSites[0].source);
+          vSource.href = "https://github.com/" + fSites[0].source;
+          vTitle.append(vSource);
+          const vList = element("ul");
+          for (const fSite of fSites) {
+            const vItem = element("li");
+            const vLink = element("a", fSite.branch, "branch");
+            vLink.href = fSite.url;
+            vItem.append(vLink);
+            if (isMain(fSite)) {
+              vLink.after(element("span", "principale", "badge"));
+            }
+            const vMeta = element("span", vDateFormat.format(new Date(fSite.updatedAt)) + " · ", "meta");
+            vMeta.append(element("code", fSite.commit.slice(0, 7)));
+            vItem.append(vMeta);
+            vList.append(vItem);
+          }
+          vSection.append(vTitle, vList);
+          vContainer.append(vSection);
+        }
+      }
+
+      fetch("sites.json", { cache: "no-store" })
+        .then((pResponse) => {
+          if (!pResponse.ok) {
+            throw new Error("HTTP " + pResponse.status);
+          }
+          return pResponse.json();
+        })
+        .then(render)
+        .catch((pError) => {
+          vContainer.replaceChildren(element("p", "Impossible de lire la liste des sites (" + pError.message + ").", "status"));
+        });
+    </script>
+  </body>
+</html>
