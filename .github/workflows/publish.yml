@@ -26,6 +26,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: pages-${{ github.repository }}-${{ inputs.branch || github.ref_name }}
       cancel-in-progress: false

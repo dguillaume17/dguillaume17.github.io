@@ -31,6 +31,10 @@ jobs:
   build:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: build-${{ github.repository }}-${{ github.ref_name }}
+      cancel-in-progress: true
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -68,6 +72,7 @@ jobs:
         with:
           name: site
           path: ${{ env.SITE_PATH }}
+          retention-days: 1
 
   publish:
     needs: build

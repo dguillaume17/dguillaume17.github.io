@@ -2,7 +2,7 @@
 
 Héberge les sites de mes repos : **[liste des sites publiés](https://dguillaume17.github.io/)**.
 
-Chaque push d'un repo publie le site de sa branche sur `https://dguillaume17.github.io/<repo>/<branche>/` ; supprimer la branche supprime son site.
+Chaque push d'un repo (ou chaque lancement à la main) publie le site de sa branche sur `https://dguillaume17.github.io/<repo>/<branche>/` ; supprimer la branche supprime son site.
 
 ## Brancher un repo
 
@@ -14,6 +14,8 @@ name: Build et publication
 on:
   push:
     branches: ['**']
+    paths: ['version.json']   # facultatif : build seulement quand ce fichier change
+  workflow_dispatch:          # lancement à la main : Actions → Run workflow → branche
   delete:
 permissions:
   contents: read
@@ -25,6 +27,8 @@ jobs:
     secrets:
       PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
 ```
+
+Moins de builds : avec `paths`, un push ne publie que s'il modifie `version.json` (n'importe quel changement du fichier) ; sinon, lancer à la main (*Actions → Build et publication → Run workflow*, ou `gh workflow run deploy.yml --ref <branche>`). Sans `paths`, chaque push publie ; `[skip ci]` dans le message du dernier commit saute un push. Un nouveau push annule le build en cours de la même branche.
 
 Le site doit fonctionner dans un sous-dossier : chemins relatifs, routage par `#`.
 

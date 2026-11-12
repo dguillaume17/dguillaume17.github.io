@@ -17,8 +17,8 @@ sites.json                         one object per site: path, repository, source
 
 ## How publication works
 
-- Two levels. publish.yml is technology-agnostic: it takes a static folder with an `index.html` (artifact `site`). Everything technology-specific lives in `<tech>.yml`, which has defaults for a standard project and inputs for the rest. The caller's `deploy.yml` only forwards its events (`push` on any branch, `delete`) and its `PAGES_TOKEN` secret.
-- `<tech>.yml`: `build` job on `push`/`workflow_dispatch` (setup, install, tests, build, upload artifact `site`), then `publish` (publish.yml); `remove` job on `delete` of a branch (publish.yml with `action: remove`, `branch: ${{ github.event.ref }}`; on a delete event `github.ref_name` is the default branch, hence the explicit input). Technology workflows call `publish.yml@main` by full path, not `./`.
+- Two levels. publish.yml is technology-agnostic: it takes a static folder with an `index.html` (artifact `site`). Everything technology-specific lives in `<tech>.yml`, which has defaults for a standard project and inputs for the rest. The caller's `deploy.yml` only forwards its events (`push` on any branch, `workflow_dispatch`, `delete`) and its `PAGES_TOKEN` secret.
+- `<tech>.yml`: `build` job on `push`/`workflow_dispatch` (setup, install, tests, build, upload artifact `site` kept 1 day; concurrency group per caller repository and branch with `cancel-in-progress`: a new push cancels the running build of the same branch, never a running publication; timeout 30 min, publication 10 min), then `publish` (publish.yml); `remove` job on `delete` of a branch (publish.yml with `action: remove`, `branch: ${{ github.event.ref }}`; on a delete event `github.ref_name` is the default branch, hence the explicit input). Technology workflows call `publish.yml@main` by full path, not `./`.
 - publish.yml runs inside the caller's run: `github.repository`, `github.ref_name`, `github.run_number` (the build number: +1 per run of the caller's workflow, all branches), the artifacts and `GITHUB_TOKEN` are the caller's. Inputs: `action` (`deploy`/`remove`), `artifact` (`site`), `branch` (default: the run's); secret `PAGES_TOKEN`; output `url`. Concurrency group per caller repository and branch.
 - It clones this repository with `PAGES_TOKEN` (caller's secret: fine-grained PAT, Contents read and write on this repository only), lists the caller's branches with the caller's `GITHUB_TOKEN` (needs `contents: read`; on API error, no cleanup), and runs publish.sh.
 - publish.sh (`deploy|remove <owner/repo> <branch> [site-dir]`; env `PAGES_URL`, `COMMIT_SHA`, `BUILD_NUMBER`, `EXISTING_BRANCHES_FILE`):
@@ -31,6 +31,15 @@ sites.json                         one object per site: path, repository, source
 - Build information in an application: read `document.documentElement.dataset` `buildVersion`, `buildBranch`, `buildDatetime`, synchronously at startup (static in the page; they describe the code running). Absent locally (no publication): show e.g. `dev`.
 - Cache: GitHub Pages serves everything with `max-age=600` (browser and CDN); headers cannot be changed. Only new URLs bypass it: `?build=` on assets, `sites.json?t=` in index.html. The first publication of a site, or a page cached before cache-verification.js was referenced, can stay stale up to ~10 minutes.
 - Constraints on a published site: works under a subfolder (relative paths; `<base href>` is rewritten; absolute `/…` paths written in the code are not); GitHub Pages serves only the root `404.html`, so client-side routing by path breaks deep links: use `#` routing.
+
+## Limiting builds
+
+Every run costs Actions minutes on a private repository (each job rounded up to the minute; public repositories are free). Levers, all in the caller's `deploy.yml` except the first:
+- Central: superseded builds are cancelled (concurrency above); artifacts kept 1 day; job timeouts.
+- `workflow_dispatch` (always present): runs the build for a chosen branch from the Actions tab, the GitHub mobile app, `gh workflow run deploy.yml --ref <branch>`, or an agent (GitHub tool `actions_run_trigger`, `run_workflow`, `workflow_id: deploy.yml`, `ref: <branch>`). The button in the Actions tab appears only once the default branch's `deploy.yml` has `workflow_dispatch`.
+- `paths: ['version.json']` on `push`: builds only when the pushes change that file (any change to the file; a dedicated file, not package.json, which changes with dependencies). The file is only a trigger: the build number shown stays `github.run_number`. A branch created without changing the file is not published: bump it or run manually. Alternative without a version file: `paths-ignore` (docs, editor settings); `paths` and `paths-ignore` cannot be combined on one event.
+- `[skip ci]` in the last pushed commit's message skips that push.
+- `delete` stays unfiltered: deleting a branch always removes its site.
 
 ## Technology notes
 
