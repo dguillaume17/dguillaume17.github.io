@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "path": "code-lab/dev-angular-22-signals",
+    "repository": "code-lab",
+    "source": "dguillaume17/code-lab",
+    "branch": "dev/angular-22-signals",
+    "site": "",
+    "url": "https://dguillaume17.github.io/code-lab/dev-angular-22-signals/",
+    "commit": "ab86729424cc04b9121f09cc729ba9a0e27918ce",
+    "build": 23,
+    "updatedAt": "2026-11-20T21:59:56Z"
+  }
+]
