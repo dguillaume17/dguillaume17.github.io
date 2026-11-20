@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Lists the sites published by .github/workflows/publish.yml, read from sites.json (one entry per repository and branch). -->
+<!-- Lists the sites published by .github/workflows/publish.yml, read from sites.json (one entry per site: repository, built branch and, for a branch with several sites, site). -->
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
@@ -112,7 +112,7 @@
   <body>
     <main>
       <h1>Sites publiés</h1>
-      <p class="intro">Un site par repo et par branche, publié automatiquement à chaque push et supprimé avec sa branche.</p>
+      <p class="intro">Un site par repo et par branche buildée : publié par le workflow <em>Build</em> du repo, supprimé avec sa branche <code>build/…</code>.</p>
       <div id="sites"><p class="status">Chargement…</p></div>
     </main>
     <script>
@@ -148,7 +148,7 @@
         }
         const vDateFormat = new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" });
         for (const [fRepository, fSites] of [...vRepositories].sort((pA, pB) => pA[0].localeCompare(pB[0]))) {
-          fSites.sort((pA, pB) => Number(isMain(pB)) - Number(isMain(pA)) || pA.branch.localeCompare(pB.branch));
+          fSites.sort((pA, pB) => Number(isMain(pB)) - Number(isMain(pA)) || pA.branch.localeCompare(pB.branch) || (pA.site || "").localeCompare(pB.site || ""));
           const vSection = element("section");
           const vTitle = element("h2", fRepository);
           const vSource = element("a", fSites[0].source);
@@ -157,7 +157,7 @@
           const vList = element("ul");
           for (const fSite of fSites) {
             const vItem = element("li");
-            const vLink = element("a", fSite.branch, "branch");
+            const vLink = element("a", fSite.site ? fSite.branch + " · " + fSite.site : fSite.branch, "branch");
             vLink.href = fSite.url;
             vItem.append(vLink);
             if (isMain(fSite)) {
