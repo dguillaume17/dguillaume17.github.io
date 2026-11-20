@@ -2,13 +2,15 @@
 
 Héberge les sites de mes repos : **[liste des sites publiés](https://dguillaume17.github.io/)**.
 
-Le workflow *Build* d'un repo lance le `build.sh` d'une branche, dépose le résultat dans la branche `build/<branche>` du repo, et ce repo-ci le publie sur `https://dguillaume17.github.io/<repo>/<branche>/`. Supprimer `build/<branche>` supprime le site.
+Le workflow *Build* d'un repo lance le `build.sh` d'une branche, dépose le résultat dans la branche `build/<branche>` du repo, et ce repo-ci le publie sur `https://dguillaume17.github.io/<repo>/<branche>/`. Supprimer la branche (ou seulement `build/<branche>`) supprime le site.
+
+Ce repo-ci : `main` contient les workflows, les scripts et les fichiers communs du site (`.github/pages/`) ; les sites publiés sont sur la branche `builds`, servie par GitHub Pages (*Settings → Pages → Branch : `builds`*).
 
 ## Utilisation
 
 - **Publier** : dans le repo, *Actions → Build → Run workflow*, choisir la branche (liste « Use workflow from », ou champ `branche`). Le site est en ligne une minute environ après la fin du build.
 - **Mettre à jour** : relancer *Build* sur la même branche (`build/<branche>` est remplacée).
-- **Dépublier** : supprimer la branche `build/<branche>` du repo.
+- **Dépublier** : supprimer la branche : `build/<branche>` et le site sont supprimés en cascade. Supprimer seulement `build/<branche>` supprime le site et garde la branche.
 
 Le build et ses logs restent dans le repo (privé ou non) ; seul le site buildé arrive ici.
 
