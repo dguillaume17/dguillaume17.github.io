@@ -3,24 +3,25 @@ name: Publication
 on:
   repository_dispatch:
     types: [deploy, remove]
+  push:
+    branches: [main]
+    paths: ['.github/pages/**', '.github/scripts/publish.sh']
   workflow_dispatch:
     inputs:
-      repository:
-        description: Repo (ex. code-lab)
-        required: true
-      branche:
-        description: Branche buildée (sans build/)
-        required: true
       action:
         description: Action
         type: choice
-        options: [publier, supprimer]
+        options: [publier, supprimer, synchroniser]
+      repository:
+        description: Repo (ex. code-lab ; pas pour synchroniser)
+      branche:
+        description: Branche buildée, sans build/ (pas pour synchroniser)
 
 permissions:
   contents: write
 
 concurrency:
-  group: publish-${{ github.event.client_payload.repository || inputs.repository }}-${{ github.event.client_payload.branch || inputs.branche }}
+  group: publish-${{ github.event.client_payload.repository || inputs.repository || 'sync' }}-${{ github.event.client_payload.branch || inputs.branche || 'sync' }}
   cancel-in-progress: false
 
 jobs:
@@ -39,6 +40,10 @@ jobs:
           INPUT_BRANCH: ${{ inputs.branche }}
           INPUT_ACTION: ${{ inputs.action }}
         run: |
+          if [ "$GITHUB_EVENT_NAME" = push ] || [ "$INPUT_ACTION" = synchroniser ]; then
+            echo "ACTION=sync" >> "$GITHUB_ENV"
+            exit 0
+          fi
           if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then
             vAction=$EVENT_ACTION
             vRepository=$PAYLOAD_REPOSITORY
@@ -64,13 +69,21 @@ jobs:
             echo "BRANCH=$vBranch"
           } >> "$GITHUB_ENV"
 
-      - name: Clone dguillaume17.github.io
+      - name: Scripts et fichiers communs
         uses: actions/checkout@v5
         with:
-          ref: main
+          path: common
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Branche builds
+        uses: actions/checkout@v5
+        with:
+          ref: builds
           path: pages
 
       - name: Accès à ${{ env.REPOSITORY }}
+        if: env.ACTION != 'sync'
         env:
           GH_TOKEN: ${{ secrets.SOURCES_TOKEN || github.token }}
           HAS_SOURCES_TOKEN: ${{ secrets.SOURCES_TOKEN != '' }}
@@ -117,6 +130,7 @@ jobs:
           rm -rf .git .build.json
 
       - name: Branches buildées du repo
+        if: env.ACTION != 'sync'
         env:
           GH_TOKEN: ${{ secrets.SOURCES_TOKEN || github.token }}
         run: |
@@ -134,4 +148,5 @@ jobs:
           if [ -s "$RUNNER_TEMP/branches.txt" ]; then
             export EXISTING_BRANCHES_FILE="$RUNNER_TEMP/branches.txt"
           fi
-          .github/scripts/publish.sh "$ACTION" "$REPOSITORY" "$BRANCH" "$GITHUB_WORKSPACE/site"
+          export PAGES_SOURCE="$GITHUB_WORKSPACE/common/.github/pages"
+          "$GITHUB_WORKSPACE/common/.github/scripts/publish.sh" "$ACTION" "${REPOSITORY:-}" "${BRANCH:-}" "$GITHUB_WORKSPACE/site"

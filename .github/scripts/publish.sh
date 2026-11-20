@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Publishes or removes the site of one branch of a repository in this repository (dguillaume17.github.io), then pushes
-# to main. Run by .github/workflows/publish.yml, from the root of a clone of this repository that can push.
+# Publishes or removes the sites of one branch of a repository on the builds branch of this repository
+# (dguillaume17.github.io, served by GitHub Pages), then pushes it. Run by .github/workflows/publish.yml, from the root of
+# a clone of the builds branch that can push.
 #
 # Usage:
 #   publish.sh deploy <owner/repo> <branch> <site-dir>   site-dir: the built static site (with its index.html)
 #   publish.sh remove <owner/repo> <branch>
+#   publish.sh sync                                        only the shared files (below)
 # <branch> is the built branch (its build sits in build/<branch> of the repository).
 #
 # - A branch's sites live in <repo>/<branch>/, both names slugged: lowercase, every run of other characters than a-z0-9
@@ -21,8 +23,10 @@
 # - sites.json lists every published site (index.html displays it); each change updates it.
 # - Cleanup: when EXISTING_BRANCHES_FILE names a file listing the repository's built branches (one per line, without
 #   build/), its sites whose build branch no longer exists are removed too. Only the repository's folder is touched.
-# - Another run may push in the meantime: the change is applied again on the new main, a few times.
-# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA, BUILD_NUMBER and BUILD_DATETIME (deploy; UTC ISO
+# - Every action also copies the shared files of PAGES_SOURCE (index.html, cache-verification.js, .nojekyll) to the root
+#   and removes from the root anything else that is neither sites.json nor the folder of a repository listed in it.
+# - Another run may push in the meantime: the change is applied again on the new builds branch, a few times.
+# Environment: PAGES_SOURCE (folder of the shared files, absolute), PAGES_BRANCH (default builds), PAGES_URL (site root, no trailing slash), COMMIT_SHA, BUILD_NUMBER and BUILD_DATETIME (deploy; UTC ISO
 # 8601, default now), EXISTING_BRANCHES_FILE (optional), GITHUB_STEP_SUMMARY (optional).
 set -euo pipefail
 
@@ -48,9 +52,28 @@ prepare_index() {
   fi
 }
 
+# Shared files from PAGES_SOURCE; removes from the root what is neither shared, nor sites.json, nor a repository folder.
+sync_static() {
+  [ -f sites.json ] || echo '[]' > sites.json
+  cp -a "$PAGES_SOURCE"/. ./
+  local vKeep fEntry
+  vKeep=$( { find "$PAGES_SOURCE" -mindepth 1 -maxdepth 1 -printf '%f\n'; echo sites.json; echo .git;
+             jq -r '.[].path | split("/")[0]' sites.json; } | sort -u)
+  while IFS= read -r fEntry; do
+    if ! grep -qxF -- "$fEntry" <<< "$vKeep"; then
+      echo "Hors du site : suppression de $fEntry"
+      rm -rf -- "./$fEntry"
+    fi
+  done < <(find . -mindepth 1 -maxdepth 1 -printf '%f\n')
+}
+
 # Applies the change to the working tree.
 apply_change() {
   [ -f sites.json ] || echo '[]' > sites.json
+  if [ "$ACTION" = sync ]; then
+    sync_static
+    return
+  fi
 
   if [ "$ACTION" = deploy ]; then
     rm -rf "$SITE_PATH"
@@ -101,10 +124,43 @@ apply_change() {
   jq --arg repository "$REPOSITORY_SLUG" --argjson kept "$vKept" \
      '[.[] | select(.repository != $repository or (.path as $p | $kept | index($p)))]' sites.json > sites.json.tmp
   mv sites.json.tmp sites.json
+  sync_static
+}
+
+# Applies the change, commits and pushes to PAGES_BRANCH; when it moved meanwhile, starts again on it (5 attempts).
+commit_and_push() {
+  local vMessage=$1 fAttempt
+  for fAttempt in 1 2 3 4 5; do
+    apply_change
+    git add -A
+    if git diff --cached --quiet; then
+      echo "Aucun changement à publier."
+      break
+    fi
+    git commit -q -m "$vMessage"
+    if git push -q origin "HEAD:$PAGES_BRANCH"; then
+      break
+    fi
+    if [ "$fAttempt" = 5 ]; then
+      echo "::error::Impossible de pousser sur $PAGES_BRANCH après $fAttempt essais."
+      exit 1
+    fi
+    echo "$PAGES_BRANCH a changé entre-temps : nouvel essai ($fAttempt)."
+    sleep $((fAttempt * 2))
+    git fetch -q --depth=1 origin "$PAGES_BRANCH"
+    git reset -q --hard FETCH_HEAD
+    git clean -qfd
+  done
 }
 
 main() {
-  ACTION=${1:?action manquante (deploy ou remove)}
+  ACTION=${1:?action manquante (deploy, remove ou sync)}
+  PAGES_BRANCH=${PAGES_BRANCH:-builds}
+  [ -d "${PAGES_SOURCE:?PAGES_SOURCE manquant}" ] || { echo "::error::PAGES_SOURCE introuvable : $PAGES_SOURCE."; exit 1; }
+  if [ "$ACTION" = sync ]; then
+    commit_and_push "Met à jour les fichiers communs du site"
+    return
+  fi
   REPOSITORY=${2:?repo manquant (owner/repo)}
   BRANCH=${3:?branche manquante}
   case "$ACTION" in
@@ -131,7 +187,7 @@ main() {
       ;;
     remove) ;;
     *)
-      echo "::error::Action inconnue : $ACTION (deploy ou remove)."
+      echo "::error::Action inconnue : $ACTION (deploy, remove ou sync)."
       exit 1
       ;;
   esac
@@ -153,31 +209,10 @@ main() {
   if [ "$ACTION" = deploy ]; then
     vMessage="Publie $SITE_PATH, build n° $BUILD_NUMBER ($REPOSITORY@${COMMIT_SHA:0:7})"
   else
-    vMessage="Supprime $SITE_PATH (branche build/$BRANCH de $REPOSITORY supprimée)"
+    vMessage="Supprime $SITE_PATH (branche $BRANCH de $REPOSITORY)"
   fi
 
-  local fAttempt
-  for fAttempt in 1 2 3 4 5; do
-    apply_change
-    git add -A
-    if git diff --cached --quiet; then
-      echo "Aucun changement à publier."
-      break
-    fi
-    git commit -q -m "$vMessage"
-    if git push -q origin HEAD:main; then
-      break
-    fi
-    if [ "$fAttempt" = 5 ]; then
-      echo "::error::Impossible de pousser sur main après $fAttempt essais."
-      exit 1
-    fi
-    echo "main a changé entre-temps : nouvel essai ($fAttempt)."
-    sleep $((fAttempt * 2))
-    git fetch -q --depth=1 origin main
-    git reset -q --hard origin/main
-    git clean -qfd
-  done
+  commit_and_push "$vMessage"
 
   if [ "$ACTION" = deploy ]; then
     local fSite
@@ -189,6 +224,5 @@ main() {
   fi
 }
 
-# The whole script is read before running: the reset above may rewrite this very file.
 main "$@"
 exit
