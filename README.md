@@ -4,7 +4,7 @@ Héberge les sites de mes repos : **[liste des sites publiés](https://dguillaum
 
 Le workflow *Build* d'un repo lance le `build.sh` d'une branche, dépose le résultat dans la branche `build/<branche>` du repo, et ce repo-ci le publie sur `https://dguillaume17.github.io/<repo>/<branche>/`. Supprimer la branche (ou seulement `build/<branche>`) supprime le site.
 
-Ce repo-ci : `main` contient les workflows, les scripts et les fichiers communs du site (`.github/pages/`) ; les sites publiés sont sur la branche `builds`, servie par GitHub Pages (*Settings → Pages → Branch : `builds`*).
+Ce repo-ci : `main` contient les workflows, le script de publication, le skill `build-dev` et les fichiers communs du site (`.github/pages/`) ; les sites publiés sont sur la branche `builds`, servie par GitHub Pages (*Settings → Pages → Branch : `builds`*).
 
 ## Utilisation
 
@@ -45,37 +45,20 @@ Le workflow lance `bash ./build.sh <sortie>` à la racine de la branche ; sans `
 - un `index.html` à la racine de `<sortie>` : un site, `…/<repo>/<branche>/` ;
 - sinon, un sous-dossier par site, chacun avec son `index.html` (nom en minuscules, chiffres et tirets) : `…/<repo>/<branche>/<site>/`.
 
-Les scripts génériques de [`.github/build/`](.github/build) font le travail ; la variable `BUILD_SCRIPTS` donne leur dossier :
+`build.sh` contient tout ce qu'il faut : tests (en une passe, sans interaction), build, puis copie du site statique dans `<sortie>`. Il tourne sur la machine Linux de GitHub ; `BUILD_NUMBER`, `BUILD_BRANCH` et `BUILD_DATETIME` lui sont fournis. Exemple (Angular) :
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-"${BUILD_SCRIPTS:?Définir BUILD_SCRIPTS}/angular.sh" "$1"
+npm ci
+npm test -- --watch=false
+npm run build
+cp -R dist/*/browser/. "$1"
 ```
-
-Deux sites dans la même branche (solution .NET avec Blazor et Avalonia) :
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-"${BUILD_SCRIPTS:?Définir BUILD_SCRIPTS}/blazor.sh" "$1/blazor" src/MonApp.Blazor
-"$BUILD_SCRIPTS/avalonia.sh" "$1/avalonia" src/MonApp.Browser --sans-tests
-```
-
-| Script | Fait | Site publié |
-|---|---|---|
-| `angular.sh` | `npm ci`, `npm test -- --watch=false`, `npm run build` | le seul `dist/*/browser` |
-| `vite.sh` (React, Vue, Svelte…) | `npm ci`, `npm run test --if-present`, `npm run build -- --base=./` | `dist` |
-| `blazor.sh` | `dotnet test` des projets de tests, `dotnet publish` (`--aot` : compilation AOT) | `wwwroot` |
-| `avalonia.sh` (projet `.Browser`) | installe `wasm-tools`, puis comme `blazor.sh` | `wwwroot` |
-| `flutter.sh` | `flutter pub get`, `flutter test` si `test/`, `flutter build web` | `build/web` |
-| `static.sh` | rien (ou `--build`) | le dossier |
-
-Arguments communs : `<sortie> [projet]` (dossier, ou `.csproj` ; par défaut la racine), `--sans-tests`, `--test "<commande>"`, `--build "<commande>"`, `--sortie <dossier buildé>`. Un `build.sh` peut aussi contenir ses propres commandes.
 
 Versions des outils, installées par le workflow d'après le repo : Node si `.nvmrc` ou `.node-version`, .NET si `global.json`, Flutter si `.flutter-version` ; sinon, ceux de la machine GitHub.
 
-En local : cloner ce repo-ci, puis `BUILD_SCRIPTS=<clone>/.github/build bash ./build.sh /tmp/site`.
+En local : `bash ./build.sh /tmp/site`.
 
 ## Contraintes du site
 

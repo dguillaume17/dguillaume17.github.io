@@ -3,10 +3,6 @@ name: Build
 on:
   workflow_call:
     inputs:
-      common-ref:
-        description: Version de dguillaume17.github.io à utiliser (scripts et configuration)
-        type: string
-        default: main
       branch-prefix:
         description: Préfixe obligatoire des branches à builder (ex. dev/) ; vide = toutes
         type: string
@@ -45,15 +41,6 @@ jobs:
             exit 1
           fi
           echo "BUILD_DATETIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-
-      - name: Scripts de build communs
-        uses: actions/checkout@v5
-        with:
-          repository: dguillaume17/dguillaume17.github.io
-          ref: ${{ inputs.common-ref }}
-          path: common
-          sparse-checkout: .github/build
-          persist-credentials: false
 
       - name: Récupère la branche
         uses: actions/checkout@v5
@@ -105,10 +92,9 @@ jobs:
       - name: build.sh
         working-directory: source
         env:
-          BUILD_SCRIPTS: ${{ github.workspace }}/common/.github/build
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_BRANCH: ${{ env.BRANCH }}
-        run: bash ./build.sh "$RUNNER_TEMP/site"
+        run: mkdir -p "$RUNNER_TEMP/site" && bash ./build.sh "$RUNNER_TEMP/site"
 
       - name: Vérifie le résultat
         working-directory: ${{ runner.temp }}/site
