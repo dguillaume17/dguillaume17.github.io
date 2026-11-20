@@ -6,8 +6,8 @@ GitHub Pages user site, served from the root of the `builds` branch (Settings â†
 
 ```
 main:
-.github/workflows/build.yml        reusable workflow called by each repository's build.yml: runs the branch's build.sh, puts the result in build/<branch> of that repository, then asks for publication (or removal, on deletion of build/<branch>)
-.github/workflows/publish.yml      runs here on repository_dispatch (deploy/remove) or by hand: copies build/<branch> of a repository into <repo>/<branch>/
+.github/workflows/build.yml        reusable workflow called by each repository's build.yml: runs the branch's build.sh, puts the result in build/<branch> of that repository, then asks for publication (or, on deletion of a branch or of its build/<branch>, deletes build/<branch> and asks for removal)
+.github/workflows/publish.yml      runs here on repository_dispatch (deploy/remove), on push to main of the shared files, or by hand: writes build/<branch> of a repository into <repo>/<branch>/ on builds
 .github/build/                     generic build scripts called by the repositories' build.sh (angular, vite, blazor, avalonia, flutter, static; lib.sh shared)
 .github/scripts/publish.sh         the publication itself, run by publish.yml
 .github/pages/                     shared site files, copied to the root of builds by publish.sh:
