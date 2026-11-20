@@ -7,6 +7,10 @@ on:
         description: Version de dguillaume17.github.io à utiliser (scripts et configuration)
         type: string
         default: main
+      branch-prefix:
+        description: Préfixe obligatoire des branches à builder (ex. dev/) ; vide = toutes
+        type: string
+        default: ''
     secrets:
       PAGES_TOKEN:
         required: false
@@ -25,7 +29,12 @@ jobs:
       - name: Vérifie la branche
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH_PREFIX: ${{ inputs.branch-prefix }}
         run: |
+          if [ -n "$BRANCH_PREFIX" ] && [[ "$BRANCH" != "$BRANCH_PREFIX"* ]]; then
+            echo "::error::Seules les branches $BRANCH_PREFIX… peuvent être buildées dans ce repo ($BRANCH refusée)."
+            exit 1
+          fi
           if [[ "$BRANCH" == build/* ]]; then
             echo "::error::$BRANCH est une branche de build : choisir la branche du code."
             exit 1
