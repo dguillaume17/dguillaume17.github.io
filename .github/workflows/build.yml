@@ -37,13 +37,13 @@ jobs:
           fi
           echo "BUILD_DATETIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
-      - name: Scripts et configuration communs
+      - name: Scripts de build communs
         uses: actions/checkout@v5
         with:
           repository: dguillaume17/dguillaume17.github.io
           ref: ${{ inputs.common-ref }}
           path: common
-          sparse-checkout: .github
+          sparse-checkout: .github/build
           persist-credentials: false
 
       - name: Récupère la branche
@@ -53,47 +53,71 @@ jobs:
           path: source
           persist-credentials: false
 
-      - name: Détecte le projet
-        id: detect
-        run: common/.github/scripts/build.sh detect source "${GITHUB_REPOSITORY#*/}" "$GITHUB_WORKSPACE/common/.github/builds.json"
+      - name: Vérifie build.sh
+        id: tools
+        working-directory: source
+        run: |
+          if [ ! -f build.sh ]; then
+            echo "::error::Pas de build.sh à la racine de la branche $BRANCH : voir https://github.com/dguillaume17/dguillaume17.github.io#buildsh"
+            exit 1
+          fi
+          vNode=""
+          for fFile in .nvmrc .node-version; do
+            if [ -f "$fFile" ]; then vNode=$fFile; break; fi
+          done
+          {
+            echo "node=$vNode"
+            echo "npm_cache=$([ -n "$vNode" ] && find . -name package-lock.json -not -path '*/node_modules/*' -print -quit | grep -q . && echo true)"
+            echo "dotnet=$([ -f global.json ] && echo global.json)"
+            echo "flutter=$([ -f .flutter-version ] && tr -d '[:space:]' < .flutter-version)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Installe Node
-        if: contains(fromJSON('["angular", "vite", "cra"]'), steps.detect.outputs.techno)
+        if: steps.tools.outputs.node != ''
         uses: actions/setup-node@v5
         with:
-          node-version: ${{ steps.detect.outputs.node }}
-          cache: npm
-          cache-dependency-path: ${{ steps.detect.outputs.lock_file }}
+          node-version-file: source/${{ steps.tools.outputs.node }}
+          cache: ${{ steps.tools.outputs.npm_cache == 'true' && 'npm' || '' }}
+          cache-dependency-path: source/**/package-lock.json
 
       - name: Installe .NET
-        if: steps.detect.outputs.techno == 'blazor' || steps.detect.outputs.techno == 'avalonia'
+        if: steps.tools.outputs.dotnet != ''
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ steps.detect.outputs.global_json == '' && steps.detect.outputs.dotnet || '' }}
-          global-json-file: ${{ steps.detect.outputs.global_json != '' && format('source/{0}', steps.detect.outputs.global_json) || '' }}
-
-      - name: Installe wasm-tools
-        if: steps.detect.outputs.techno == 'avalonia' || steps.detect.outputs.aot == 'true'
-        run: dotnet workload install wasm-tools
+          global-json-file: source/global.json
 
       - name: Installe Flutter
-        if: steps.detect.outputs.techno == 'flutter'
+        if: steps.tools.outputs.flutter != ''
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: ${{ steps.detect.outputs.flutter }}
+          flutter-version: ${{ steps.tools.outputs.flutter }}
 
-      - name: Tests et build
+      - name: build.sh
+        working-directory: source
         env:
-          TECHNO: ${{ steps.detect.outputs.techno }}
-          PROJECT: ${{ steps.detect.outputs.project }}
-          TEST: ${{ steps.detect.outputs.test }}
-          BUILD: ${{ steps.detect.outputs.build }}
-          OUTPUT: ${{ steps.detect.outputs.output }}
-          AOT: ${{ steps.detect.outputs.aot }}
+          BUILD_SCRIPTS: ${{ github.workspace }}/common/.github/build
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_BRANCH: ${{ env.BRANCH }}
-        run: common/.github/scripts/build.sh run source "$RUNNER_TEMP/site"
+        run: bash ./build.sh "$RUNNER_TEMP/site"
+
+      - name: Vérifie le résultat
+        working-directory: ${{ runner.temp }}/site
+        run: |
+          if [ -f index.html ]; then
+            echo "Un site : $(find . -type f | wc -l) fichiers."
+          else
+            vSites=$(find . -mindepth 2 -maxdepth 2 -name index.html -printf '%h\n' | sed 's|^\./||' | sort)
+            if [ -z "$vSites" ]; then
+              echo "::error::build.sh n'a produit ni index.html à la racine du dossier de sortie, ni de sous-dossiers avec un index.html."
+              exit 1
+            fi
+            if grep -qvxE '[a-z0-9]+(-[a-z0-9]+)*' <<< "$vSites"; then
+              echo "::error::Noms de sites invalides (minuscules, chiffres et tirets) : $(tr '\n' ' ' <<< "$vSites")."
+              exit 1
+            fi
+            echo "Sites : $(tr '\n' ' ' <<< "$vSites")"
+          fi
 
       - name: Dépose le build dans build/${{ env.BRANCH }}
         working-directory: ${{ runner.temp }}/site

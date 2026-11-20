@@ -1,9 +1,0 @@
-{
-  "defaults": {
-    "node": "22",
-    "dotnet": "10.0.x"
-  },
-  "repositories": {
-    "code-lab": {}
-  }
-}
