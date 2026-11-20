@@ -70,6 +70,20 @@ jobs:
           ref: main
           path: pages
 
+      - name: Accès à ${{ env.REPOSITORY }}
+        env:
+          GH_TOKEN: ${{ secrets.SOURCES_TOKEN || github.token }}
+          HAS_SOURCES_TOKEN: ${{ secrets.SOURCES_TOKEN != '' }}
+        run: |
+          if ! gh api "repos/$REPOSITORY" --silent 2> /dev/null; then
+            if [ "$HAS_SOURCES_TOKEN" = true ]; then
+              echo "::error::Le secret SOURCES_TOKEN ne donne pas accès à $REPOSITORY (Contents: Read sur ce repo)."
+            else
+              echo "::error::$REPOSITORY est privé ou introuvable : ajouter le secret SOURCES_TOKEN à ce repo (jeton fine-grained, Contents: Read)."
+            fi
+            exit 1
+          fi
+
       - name: Récupère build/${{ env.BRANCH }} de ${{ env.REPOSITORY }}
         if: env.ACTION == 'deploy'
         uses: actions/checkout@v5
