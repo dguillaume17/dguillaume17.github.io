@@ -1,6 +1,6 @@
 # dguillaume17.github.io — instructions for agents
 
-GitHub Pages user site, served from the root of the `builds` branch (Settings → Pages → Branch: `builds`, `/ (root)`). `main` holds only the workflows, scripts, shared site files and documentation; `builds` holds only the published content, written by publish.sh. Hosts the sites of the owner's other repositories, at `https://dguillaume17.github.io/<repo>/<branch>/` (or `<repo>/<branch>/<site>/` for a branch with several sites), and the workflows and generic build scripts that build and publish them. README.md is for humans (usage, connecting a repository, build.sh); everything else is here. Workflow files have no comments: their behavior is documented here.
+GitHub Pages user site, served from the root of the `builds` branch (Settings → Pages → Branch: `builds`, `/ (root)`). `main` holds only the workflows, scripts, shared site files and documentation; `builds` holds only the published content, written by publish.sh. Hosts the sites of the owner's other repositories, at `https://dguillaume17.github.io/<repo>/<branch>/` (or `<repo>/<branch>/<site>/` for a branch with several sites), and the workflows that build and publish them. README.md is for humans (usage, connecting a repository, build.sh); everything else is here. Workflow files have no comments: their behavior is documented here.
 
 ## Layout
 
@@ -9,7 +9,6 @@ main:
 .github/workflows/build.yml        reusable workflow called by each repository's build.yml: runs the branch's build.sh, puts the result in build/<branch> of that repository, then asks for publication (or, on deletion of a branch or of its build/<branch>, deletes build/<branch> and asks for removal)
 .github/workflows/publish.yml      runs here on repository_dispatch (deploy/remove), on push to main of the shared files, or by hand: writes build/<branch> of a repository into <repo>/<branch>/ on builds
 .github/skills/build-dev/          Claude Code skill /build-dev, copied into the repositories' dev/… branches (by their own skills, e.g. code-lab's create-lab and update-lab); kept outside .claude/ so it is not active here
-.github/build/                     generic build scripts called by the repositories' build.sh (angular, vite, blazor, avalonia, flutter, static; lib.sh shared)
 .github/scripts/publish.sh         the publication itself, run by publish.yml
 .github/pages/                     shared site files, copied to the root of builds by publish.sh:
   index.html                         list of the sites, rendered from sites.json
@@ -28,10 +27,10 @@ sites.json                         one object per site: path, repository, source
 1. In a repository, the user (or an agent: the `/build-dev` skill of `.github/skills/build-dev`, when the repository's branch has it) runs its *Build* workflow (`workflow_dispatch`) on a branch: input `branche`, else the branch picked in « Use workflow from ». The repository's `build.yml` is the README's: `workflow_dispatch` (input `branche`) and `delete` triggers, `permissions: contents: write`, one job `uses: dguillaume17/dguillaume17.github.io/.github/workflows/build.yml@main` with `secrets: inherit`. Optional in it: `run-name` naming the built branch (lets agents find the run they started: the dispatch API returns no run id) and `with: branch-prefix: dev/`. The reusable workflow reads `github.event.inputs.branche` from the caller's event (the `github` context of a called workflow is the caller's). Each branch to publish has a `build.sh` at its root.
 2. build.yml, job `build` (any event but `delete`; runs in the repository's run: its minutes, its private logs; concurrency per repository and branch, cancel-in-progress; timeout 30 min):
    - refuses a branch not starting with input `branch-prefix` (when set, e.g. `dev/`), a `build/…` branch, and a branch that does not exist (`git/matching-refs` API);
-   - checks out `.github/build` of this repository (input `common-ref`, default `main`; public, no token) and the branch;
+   - checks out the branch;
    - fails without `build.sh` at the root of the branch;
    - sets up tools from the branch's version files only: Node (`setup-node`, `node-version-file` `.nvmrc` or `.node-version`; npm cache when a `package-lock.json` exists), .NET (`setup-dotnet`, `global.json`), Flutter (`flutter-action`, stable channel, version from `.flutter-version`); otherwise the runner's preinstalled tools;
-   - runs `bash ./build.sh "$RUNNER_TEMP/site"` from the branch root with `BUILD_SCRIPTS` (the checked-out `.github/build`), `BUILD_NUMBER`, `BUILD_BRANCH`, `BUILD_DATETIME`;
+   - runs `bash ./build.sh "$RUNNER_TEMP/site"` from the branch root with `BUILD_NUMBER`, `BUILD_BRANCH`, `BUILD_DATETIME`. `build.sh` is self-contained: tests in one non-interactive pass, build, copy of the static site to `$1`; anything beyond the tool installed from the version file (e.g. a .NET workload) is its own business;
    - checks the output: an `index.html` at its root (one site), else subfolders holding an `index.html`, named `[a-z0-9]+(-[a-z0-9]+)*` (one site each);
    - writes `.build.json` (`repository`, `branch`, `commit`, `buildNumber` = `github.run_number` of the repository's Build workflow, `buildDatetime` = UTC ISO 8601 at the start of the build) and force-pushes the output as a single orphan commit to `build/<branch>` with the repository's `GITHUB_TOKEN` (no history: the repository does not grow with every build; a push by `GITHUB_TOKEN` triggers no workflow);
    - sends `repository_dispatch` `deploy` (`client_payload`: `repository` owner/name, `branch`) to this repository with `PAGES_TOKEN`.
@@ -44,17 +43,6 @@ sites.json                         one object per site: path, repository, source
    - checks out `.github` of `main` (publish.sh, `.github/pages`) and the `builds` branch;
    - runs publish.sh in the `builds` clone with `PAGES_SOURCE` = `.github/pages`; it pushes to `builds` with this repository's `GITHUB_TOKEN` (GitHub Pages deploys pushes made with `GITHUB_TOKEN`, checked live). synchroniser: only the shared files.
 5. Agents publish by running the repository's Build workflow: GitHub tool `actions_run_trigger`, `run_workflow`, `workflow_id: build.yml`, `ref: <a branch that has the workflow, e.g. the default one>`, `inputs: {"branche": "<branch>"}`; then follow the run in the repository and publish.yml here, and give the URL(s). Unpublish: the user deletes `build/<branch>` or the branch itself (sessions can usually push only to their own branch and have no branch-deletion tool); or publish.yml by hand with `supprimer` (the site goes, `build/<branch>` stays). Republish an existing build without rebuilding: publish.yml by hand.
-
-## Generic build scripts (.github/build)
-
-- Called by a repository's `build.sh` as `"$BUILD_SCRIPTS/<tech>.sh" <out> [project] [options]`, from the branch root. Locally, `BUILD_SCRIPTS` points to `.github/build` of a clone of this repository (no download fallback, owner's choice); `build.sh` fails clearly when it is missing (`${BUILD_SCRIPTS:?…}`).
-- lib.sh (sourced): arguments `<out>` (created; must not already hold an `index.html`), `[project]` (folder or `.csproj`, default `.`), `--sans-tests`, `--test "<command>"`, `--build "<command>"`, `--sortie <built folder>`; `BUILD_NUMBER`/`BUILD_BRANCH` default to `0`/`local`; tests run with `CI=true`; the built folder is copied to `<out>` without `.git`, `.github` and a root `build.sh`; `install_workload` retries with `sudo -n` when the SDK folder is not writable (preinstalled SDK on runners).
-- angular.sh: `npm ci`, `npm test -- --watch=false`, `npm run build`, the single `dist/*/browser`.
-- vite.sh: `npm ci`, `npm run test --if-present`, `npm run build -- --base=./` (Vite emits `./assets/…` instead of `/assets/…`), `dist`. Create React App: `--build "npm run build" --sortie build` and `"homepage": "."`.
-- blazor.sh: `dotnet test -c Release` of each `.csproj` referencing `Microsoft.NET.Test.Sdk` under the current folder (none: no tests), `dotnet publish <project> -c Release -p:CompressionEnabled=false -p:BuildNumber -p:BuildBranch` (precompressed copies of index.html would miss publish.sh's changes; Pages compresses anyway), `wwwroot` of the publication; `--aot` installs `wasm-tools` and sets `RunAOTCompilation`. With `--build`, `--sortie` is required.
-- avalonia.sh: installs `wasm-tools` (required by `Avalonia.Browser`), then blazor.sh. Several .NET sites in one branch: `--sans-tests` on all but one call, or the tests run several times.
-- flutter.sh: `flutter pub get`, `flutter test` if `test/`, `flutter build web --release` (+ `--pwa-strategy=none` when the option exists: no service worker serving an old build), `build/web`.
-- static.sh: optional `--build`, then the folder.
 
 ## publish.sh
 
@@ -83,23 +71,23 @@ sites.json                         one object per site: path, repository, source
 
 ## Connecting a new repository
 
-1. Write the branch's `build.sh` with the generic scripts (README examples) and the version files (`.nvmrc`, `global.json`, `.flutter-version`); run it locally with `BUILD_SCRIPTS` set: it must pass and produce one site or subfolders of sites.
+1. Write the branch's `build.sh` (self-contained, README example) and the version file (`.nvmrc`, `.node-version`, `global.json` or `.flutter-version`); run `bash ./build.sh /tmp/site` locally: it must pass and produce one site or subfolders of sites.
 2. Check the site works under a subfolder (see constraints); fix it in the repository if needed and say so.
 3. Add the README's `build.yml` to the repository (on its default branch, so the Actions tab shows it); ask the user for the `PAGES_TOKEN` secret, and for `SOURCES_TOKEN` here when the repository is private and the token does not cover it.
 4. Run Build (see Flow, 5) and follow both runs: `build/<branch>` exists in the repository, a commit « Publie <repo>/<branch>, build n° N » lands on `builds` here, the sites' `cache.json` and `sites.json` entries exist. Sessions often cannot reach `github.io`: ask the user to open the site and check the build information it shows.
 
-A new technology: add `<tech>.sh` to `.github/build` (with lib.sh), its tool setup to build.yml when it needs one (from a version file), test it locally on a sample, and document it here and in the README.
+A new technology needs nothing here unless its tool must be installed from a version file the workflow does not read yet: then add that setup step to build.yml, test it, and document it here and in the README.
 
 ## Tests
 
-- Tested locally (Linux, Node 22, .NET 10): build.sh with angular.sh (code-lab), vite.sh (Vite React), blazor.sh + avalonia.sh in one branch (two sites), static.sh; argument errors; publish.sh with a bare repository as `origin` (single and multi-site deploys, single ↔ multi on the same branch, remove, cleanup, two clones pushing at once; on a `builds` branch copied from the former `main`: sync removes everything but the site); every site served from the clone's root renders under its folder (Playwright), index.html lists `branch · site`, cache-verification.js reloads with `?build=`. Live (code-lab): build, `build/main`, dispatch, publication with `SOURCES_TOKEN`, Pages deployment after a `GITHUB_TOKEN` push, removal on deletion of `build/<branch>` (all while sites were on `main`). Flutter: not tested (no SDK here).
-- Before pushing to `main`: test the scripts and publish.sh the same way. A repository's Build workflow can test a branch of this repository with `uses: …/build.yml@<branch>` and `with: common-ref: <branch>`; publish.yml always runs from `main` for `repository_dispatch` and `push`.
+- Tested locally: publish.sh with a bare repository as `origin` (single and multi-site deploys, single ↔ multi on the same branch, remove, cleanup, two clones pushing at once; on a `builds` branch copied from the former `main`: sync removes everything but the site); sites served from the clone's root render under their folder (Playwright), index.html lists `branch · site`, cache-verification.js reloads with `?build=`. Live (code-lab): build, `build/<branch>`, dispatch, publication with `SOURCES_TOKEN`, Pages deployment after a `GITHUB_TOKEN` push, removal on branch deletion, `branch-prefix`.
+- Before pushing to `main`: test publish.sh the same way. A repository's Build workflow can test a branch of this repository with `uses: …/build.yml@<branch>`; publish.yml always runs from `main` for `repository_dispatch` and `push`.
 
 ## Rules
 
 - Repositories use `@main`: a push to `main` changes every repository at its next build.
 - Publication commits land on `builds` continuously, never on `main`: changes to `main` go through a branch and a pull request.
 - Instructions for agents live in this file only (no AGENTS.md).
-- A change of contract (the repository's build.yml, the build.sh contract, the generic scripts' arguments, site layout, fields of sites.json, cache.json or .build.json, data-build-* attributes, dispatch payload) goes into this file, the README, and the repositories.
+- A change of contract (the repository's build.yml, the build.sh contract, site layout, fields of sites.json, cache.json or .build.json, data-build-* attributes, dispatch payload) goes into this file, the README, and the repositories.
 - Workflow files have no comments; their documentation is this file.
 - User-facing text (README, index.html, workflow step names, error messages) in French; code and this file in English.
