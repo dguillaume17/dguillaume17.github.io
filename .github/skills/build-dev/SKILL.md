@@ -1,6 +1,6 @@
 ---
 name: build-dev
-description: Builde et publie la branche courante (seulement les branches dev/…) avec le workflow Build du repo, attend la fin, puis donne l'adresse du site ou la cause de l'échec. À utiliser pour « /build-dev », « builde », « publie cette branche ».
+description: "Builde et publie la branche courante (seulement les branches dev/…) avec le workflow Build du repo, attend la fin, puis donne l'adresse du site ou la cause de l'échec. À utiliser pour « /build-dev », « builde », « publie cette branche »."
 ---
 
 # /build-dev
