@@ -83,6 +83,10 @@ Le site doit fonctionner dans un sous-dossier : chemins relatifs, routage par `#
 
 Build dans le code de l'application : attributs `data-build-version` (numéro), `data-build-branch` et `data-build-datetime` (date UTC ISO du build) de la balise `<html>`, présents dès le chargement (absents en local).
 
+## Skill Claude Code
+
+[`.github/skills/build-dev`](.github/skills/build-dev/SKILL.md) : `/build-dev` builde et publie la branche `dev/…` courante, puis donne l'adresse du site. À copier dans `.claude/skills/` d'un repo (code-lab le fait avec ses skills `create-lab` et `update-lab`).
+
 ## Secrets
 
 - `PAGES_TOKEN`, dans chaque repo : demande la publication à ce repo-ci.
