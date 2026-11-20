@@ -38,7 +38,7 @@ jobs:
           echo "BUILD_DATETIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
       - name: Scripts et configuration communs
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: dguillaume17/dguillaume17.github.io
           ref: ${{ inputs.common-ref }}
@@ -47,7 +47,7 @@ jobs:
           persist-credentials: false
 
       - name: Récupère la branche
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: refs/heads/${{ env.BRANCH }}
           path: source
@@ -59,11 +59,11 @@ jobs:
 
       - name: Installe Node
         if: contains(fromJSON('["angular", "vite", "cra"]'), steps.detect.outputs.techno)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.detect.outputs.node }}
           cache: npm
-          cache-dependency-path: source/${{ steps.detect.outputs.directory }}/package-lock.json
+          cache-dependency-path: ${{ steps.detect.outputs.lock_file }}
 
       - name: Installe .NET
         if: steps.detect.outputs.techno == 'blazor' || steps.detect.outputs.techno == 'avalonia'

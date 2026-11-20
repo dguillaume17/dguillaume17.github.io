@@ -141,6 +141,7 @@ detect() {
     echo "techno=$vTechno"
     echo "project=$vProject"
     echo "directory=$vDir"
+    echo "lock_file=${vSource%/}$([ "$vDir" = . ] || printf '/%s' "$vDir")/package-lock.json"
     echo "test=$vTest"
     echo "build=$vBuild"
     echo "output=$vOutput"

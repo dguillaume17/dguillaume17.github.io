@@ -65,14 +65,14 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Clone dguillaume17.github.io
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           path: pages
 
       - name: Récupère build/${{ env.BRANCH }} de ${{ env.REPOSITORY }}
         if: env.ACTION == 'deploy'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ env.REPOSITORY }}
           ref: refs/heads/build/${{ env.BRANCH }}
