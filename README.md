@@ -34,6 +34,7 @@ jobs:
     secrets: inherit
 ```
 
+   Facultatif : `run-name` (titre de chaque exécution) et `with: branch-prefix: dev/` (seules les branches `dev/…` peuvent être buildées) ; voir le `build.yml` de [code-lab](https://github.com/dguillaume17/code-lab).
 2. Ajouter un `build.sh` à la racine de chaque branche à publier (voir ci-dessous) et, selon la techno, `.nvmrc`, `global.json` ou `.flutter-version`.
 3. Ajouter le secret `PAGES_TOKEN` au repo (*Settings → Secrets and variables → Actions*) : jeton fine-grained limité à `dguillaume17.github.io`, permission *Contents: Read and write*.
 

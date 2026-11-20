@@ -1,4 +1,5 @@
 name: Publication
+run-name: ${{ github.event_name == 'repository_dispatch' && format('{0} {1} {2}', github.event.action == 'remove' && 'Suppression' || 'Publication', github.event.client_payload.repository, github.event.client_payload.branch) || github.event_name == 'push' && 'Synchronisation' || format('{0} {1} {2}', inputs.action, inputs.repository, inputs.branche) }}
 
 on:
   repository_dispatch:

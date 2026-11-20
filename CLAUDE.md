@@ -24,9 +24,9 @@ sites.json                         one object per site: path, repository, source
 
 ## Flow
 
-1. In a repository, the user runs its *Build* workflow (`workflow_dispatch`) on a branch: input `branche`, else the branch picked in « Use workflow from ». The repository's `build.yml` is the README's: `workflow_dispatch` (input `branche`) and `delete` triggers, `permissions: contents: write`, one job `uses: dguillaume17/dguillaume17.github.io/.github/workflows/build.yml@main` with `secrets: inherit`. The reusable workflow reads `github.event.inputs.branche` from the caller's event (the `github` context of a called workflow is the caller's). Each branch to publish has a `build.sh` at its root.
+1. In a repository, the user (or an agent: the repository's `/build` skill when it has one) runs its *Build* workflow (`workflow_dispatch`) on a branch: input `branche`, else the branch picked in « Use workflow from ». The repository's `build.yml` is the README's: `workflow_dispatch` (input `branche`) and `delete` triggers, `permissions: contents: write`, one job `uses: dguillaume17/dguillaume17.github.io/.github/workflows/build.yml@main` with `secrets: inherit`. Optional in it: `run-name` naming the built branch (lets agents find the run they started: the dispatch API returns no run id) and `with: branch-prefix: dev/`. The reusable workflow reads `github.event.inputs.branche` from the caller's event (the `github` context of a called workflow is the caller's). Each branch to publish has a `build.sh` at its root.
 2. build.yml, job `build` (any event but `delete`; runs in the repository's run: its minutes, its private logs; concurrency per repository and branch, cancel-in-progress; timeout 30 min):
-   - refuses a `build/…` branch, fails when the branch does not exist (`git/matching-refs` API);
+   - refuses a branch not starting with input `branch-prefix` (when set, e.g. `dev/`), a `build/…` branch, and a branch that does not exist (`git/matching-refs` API);
    - checks out `.github/build` of this repository (input `common-ref`, default `main`; public, no token) and the branch;
    - fails without `build.sh` at the root of the branch;
    - sets up tools from the branch's version files only: Node (`setup-node`, `node-version-file` `.nvmrc` or `.node-version`; npm cache when a `package-lock.json` exists), .NET (`setup-dotnet`, `global.json`), Flutter (`flutter-action`, stable channel, version from `.flutter-version`); otherwise the runner's preinstalled tools;
@@ -36,6 +36,7 @@ sites.json                         one object per site: path, repository, source
    - sends `repository_dispatch` `deploy` (`client_payload`: `repository` owner/name, `branch`) to this repository with `PAGES_TOKEN`.
 3. build.yml, job `remove` (on `delete` of any branch; the workflow runs from the repository's default branch), cascade: deleting `build/<branch>` sends `repository_dispatch` `remove` for `<branch>`; deleting another branch `<branch>` deletes `build/<branch>` when it exists (API, the repository's `GITHUB_TOKEN`: no second `delete` event) and sends the same `remove`; without `build/<branch>`, nothing. Costs a short job for every deleted branch.
 4. publish.yml here (`repository_dispatch` deploy/remove; `workflow_dispatch`: `action` publier/supprimer/synchroniser, `repository`, `branche`; `push` on `main` changing `.github/pages/**` or publish.sh: synchroniser; `permissions: contents: write`; concurrency per repository and branch, no cancel; timeout 10 min):
+   - run name: « Publication <owner/repo> <branch> », « Suppression <owner/repo> <branch> », « Synchronisation », or the inputs for a manual run;
    - validates the parameters: repository of the owner only, valid branch name;
    - deploy: checks out `build/<branch>` of the repository with `SOURCES_TOKEN` (else `GITHUB_TOKEN`: public repositories only), reads and removes `.build.json` and `.git`;
    - lists the repository's `build/…` branches (same token; on API error, no cleanup);
