@@ -36,6 +36,7 @@ sites.json                         one object per site: path, repository, source
    - sends `repository_dispatch` `deploy` (`client_payload`: `repository` owner/name, `branch`) to this repository with `PAGES_TOKEN`.
 3. build.yml, job `remove` (on `delete` of any branch; the workflow runs from the repository's default branch), cascade: deleting `build/<branch>` sends `repository_dispatch` `remove` for `<branch>`; deleting another branch `<branch>` deletes `build/<branch>` when it exists (API, the repository's `GITHUB_TOKEN`: no second `delete` event) and sends the same `remove`; without `build/<branch>`, nothing. Costs a short job for every deleted branch.
 4. publish.yml here (`repository_dispatch` deploy/remove; `workflow_dispatch`: `action` publier/supprimer/synchroniser, `repository`, `branche`; `push` on `main` changing `.github/pages/**` or publish.sh: synchroniser; `permissions: contents: write`; concurrency per repository and branch, no cancel; timeout 10 min):
+   - run name: « Publication <owner/repo> <branch> », « Suppression <owner/repo> <branch> », « Synchronisation », or the inputs for a manual run;
    - validates the parameters: repository of the owner only, valid branch name;
    - deploy: checks out `build/<branch>` of the repository with `SOURCES_TOKEN` (else `GITHUB_TOKEN`: public repositories only), reads and removes `.build.json` and `.git`;
    - lists the repository's `build/…` branches (same token; on API error, no cleanup);
