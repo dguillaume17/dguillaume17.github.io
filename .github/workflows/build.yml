@@ -1,0 +1,151 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      common-ref:
+        description: Version de dguillaume17.github.io à utiliser (scripts et configuration)
+        type: string
+        default: main
+    secrets:
+      PAGES_TOKEN:
+        required: false
+
+jobs:
+  build:
+    if: github.event_name != 'delete'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: build-${{ github.repository }}-${{ github.event.inputs.branche || github.ref_name }}
+      cancel-in-progress: true
+    env:
+      BRANCH: ${{ github.event.inputs.branche || github.ref_name }}
+    steps:
+      - name: Vérifie la branche
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$BRANCH" == build/* ]]; then
+            echo "::error::$BRANCH est une branche de build : choisir la branche du code."
+            exit 1
+          fi
+          vFound=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/$BRANCH" | jq -r --arg ref "refs/heads/$BRANCH" '.[] | select(.ref == $ref) | .ref')
+          if [ -z "$vFound" ]; then
+            echo "::error::La branche $BRANCH n'existe pas dans $GITHUB_REPOSITORY."
+            exit 1
+          fi
+          echo "BUILD_DATETIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Scripts et configuration communs
+        uses: actions/checkout@v4
+        with:
+          repository: dguillaume17/dguillaume17.github.io
+          ref: ${{ inputs.common-ref }}
+          path: common
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Récupère la branche
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/${{ env.BRANCH }}
+          path: source
+          persist-credentials: false
+
+      - name: Détecte le projet
+        id: detect
+        run: common/.github/scripts/build.sh detect source "${GITHUB_REPOSITORY#*/}" "$GITHUB_WORKSPACE/common/.github/builds.json"
+
+      - name: Installe Node
+        if: contains(fromJSON('["angular", "vite", "cra"]'), steps.detect.outputs.techno)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.detect.outputs.node }}
+          cache: npm
+          cache-dependency-path: source/${{ steps.detect.outputs.directory }}/package-lock.json
+
+      - name: Installe .NET
+        if: steps.detect.outputs.techno == 'blazor' || steps.detect.outputs.techno == 'avalonia'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ steps.detect.outputs.global_json == '' && steps.detect.outputs.dotnet || '' }}
+          global-json-file: ${{ steps.detect.outputs.global_json != '' && format('source/{0}', steps.detect.outputs.global_json) || '' }}
+
+      - name: Installe wasm-tools
+        if: steps.detect.outputs.techno == 'avalonia' || steps.detect.outputs.aot == 'true'
+        run: dotnet workload install wasm-tools
+
+      - name: Installe Flutter
+        if: steps.detect.outputs.techno == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ steps.detect.outputs.flutter }}
+
+      - name: Tests et build
+        env:
+          TECHNO: ${{ steps.detect.outputs.techno }}
+          PROJECT: ${{ steps.detect.outputs.project }}
+          TEST: ${{ steps.detect.outputs.test }}
+          BUILD: ${{ steps.detect.outputs.build }}
+          OUTPUT: ${{ steps.detect.outputs.output }}
+          AOT: ${{ steps.detect.outputs.aot }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_BRANCH: ${{ env.BRANCH }}
+        run: common/.github/scripts/build.sh run source "$RUNNER_TEMP/site"
+
+      - name: Dépose le build dans build/${{ env.BRANCH }}
+        working-directory: ${{ runner.temp }}/site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          vCommit=$(git -C "$GITHUB_WORKSPACE/source" rev-parse HEAD)
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg branch "$BRANCH" --arg commit "$vCommit" \
+             --argjson buildNumber "$BUILD_NUMBER" --arg buildDatetime "$BUILD_DATETIME" \
+             '{repository: $repository, branch: $branch, commit: $commit, buildNumber: $buildNumber, buildDatetime: $buildDatetime}' > .build.json
+          git init -q -b build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Build n° $BUILD_NUMBER de $BRANCH ($GITHUB_REPOSITORY@${vCommit:0:7})"
+          vAuth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $vAuth" push -q --force \
+            "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/build/$BRANCH"
+
+      - name: Demande la publication
+        env:
+          GH_TOKEN: ${{ secrets.PAGES_TOKEN }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret PAGES_TOKEN manquant : le build est dans build/$BRANCH mais n'est pas publié."
+            exit 1
+          fi
+          gh api repos/dguillaume17/dguillaume17.github.io/dispatches -f event_type=deploy \
+            -f "client_payload[repository]=$GITHUB_REPOSITORY" -f "client_payload[branch]=$BRANCH"
+          vSlug() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'; }
+          {
+            echo "Build n° $BUILD_NUMBER de \`$BRANCH\` déposé dans \`build/$BRANCH\`, publication demandée."
+            echo "Site (dans une minute environ) : https://dguillaume17.github.io/$(vSlug "${GITHUB_REPOSITORY#*/}")/$(vSlug "$BRANCH")/"
+            echo "Suivi : https://github.com/dguillaume17/dguillaume17.github.io/actions/workflows/publish.yml"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  remove:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch' && startsWith(github.event.ref, 'build/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Demande la suppression du site
+        env:
+          GH_TOKEN: ${{ secrets.PAGES_TOKEN }}
+          REF: ${{ github.event.ref }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret PAGES_TOKEN manquant : le site de ${REF#build/} n'est pas supprimé."
+            exit 1
+          fi
+          gh api repos/dguillaume17/dguillaume17.github.io/dispatches -f event_type=remove \
+            -f "client_payload[repository]=$GITHUB_REPOSITORY" -f "client_payload[branch]=${REF#build/}"
+          echo "Suppression du site de \`${REF#build/}\` demandée." | tee -a "$GITHUB_STEP_SUMMARY"

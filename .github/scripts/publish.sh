@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Publishes or removes one site of a caller repository in this repository (dguillaume17.github.io), then pushes to main.
-# Run by .github/workflows/publish.yml, from the root of a clone of this repository that can push.
+# Publishes or removes the site of one branch of a repository in this repository (dguillaume17.github.io), then pushes
+# to main. Run by .github/workflows/publish.yml, from the root of a clone of this repository that can push.
 #
 # Usage:
 #   publish.sh deploy <owner/repo> <branch> <site-dir>   site-dir: the built static site (with its index.html)
 #   publish.sh remove <owner/repo> <branch>
+# <branch> is the built branch (its build sits in build/<branch> of the repository).
 #
 # - A site lives in <repo>/<branch>/, both names slugged: lowercase, every run of other characters than a-z0-9 becomes "-".
 # - deploy: replaces the folder with site-dir and writes its cache.json ({"buildVersion": <number>}); in its index.html:
@@ -15,10 +16,11 @@
 #   - adds <script src="/cache-verification.js"> before </head> (shared file at the root of this repository): reloads
 #     the page when it comes from a cache;
 # - sites.json lists every published site (index.html displays it); each change updates it.
-# - Cleanup: when EXISTING_BRANCHES_FILE names a file listing the caller's branches (one per line), the caller's sites
-#   whose branch no longer exists are removed too. Only the caller's folder is ever touched.
+# - Cleanup: when EXISTING_BRANCHES_FILE names a file listing the repository's built branches (one per line, without
+#   build/), its sites whose build branch no longer exists are removed too. Only the repository's folder is touched.
 # - Another run may push in the meantime: the change is applied again on the new main, a few times.
-# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA and BUILD_NUMBER (deploy), EXISTING_BRANCHES_FILE (optional), GITHUB_OUTPUT and GITHUB_STEP_SUMMARY (optional).
+# Environment: PAGES_URL (site root, no trailing slash), COMMIT_SHA, BUILD_NUMBER and BUILD_DATETIME (deploy; UTC ISO
+# 8601, default now), EXISTING_BRANCHES_FILE (optional), GITHUB_OUTPUT and GITHUB_STEP_SUMMARY (optional).
 set -euo pipefail
 
 slug() {
@@ -32,10 +34,10 @@ prepare_index() {
   BUILD_NUMBER=$BUILD_NUMBER perl -pi -e \
     's/(?<=\s)(href|src)="(?![a-zA-Z][a-zA-Z0-9+.-]*:|\/|#)([^"?#]+)"/$1="$2?build=$ENV{BUILD_NUMBER}"/g' "$vIndex"
   if grep -qiE '<html[ >]' "$vIndex" && grep -qi '</head>' "$vIndex"; then
-    BUILD_NUMBER=$BUILD_NUMBER BRANCH=$BRANCH UPDATED_AT=$UPDATED_AT perl -0pi -e '
+    BUILD_NUMBER=$BUILD_NUMBER BRANCH=$BRANCH BUILD_DATETIME=$BUILD_DATETIME perl -0pi -e '
       sub escape { my $v = shift; $v =~ s/&/&amp;/g; $v =~ s/"/&quot;/g; $v =~ s/</&lt;/g; $v =~ s/>/&gt;/g; return $v }
       my $branch = escape($ENV{BRANCH});
-      s/<html(?=[\s>])/<html data-build-version="$ENV{BUILD_NUMBER}" data-build-branch="$branch" data-build-datetime="$ENV{UPDATED_AT}"/i;
+      s/<html(?=[\s>])/<html data-build-version="$ENV{BUILD_NUMBER}" data-build-branch="$branch" data-build-datetime="$ENV{BUILD_DATETIME}"/i;
       s/<\/head>/  <script src="\/cache-verification.js"><\/script>\n  <\/head>/i;' "$vIndex"
   else
     echo "::warning::index.html sans <html> ou </head> : pas d'informations de build ni de vérification du cache."
@@ -54,7 +56,7 @@ apply_change() {
     jq -n --argjson buildVersion "$BUILD_NUMBER" '{buildVersion: $buildVersion}' > "$SITE_PATH/cache.json"
     jq --arg path "$SITE_PATH" --arg repository "$REPOSITORY_SLUG" --arg source "$REPOSITORY" \
        --arg branch "$BRANCH" --arg url "$PAGES_URL/$SITE_PATH/" --arg commit "$COMMIT_SHA" \
-       --argjson build "$BUILD_NUMBER" --arg updatedAt "$UPDATED_AT" \
+       --argjson build "$BUILD_NUMBER" --arg updatedAt "$BUILD_DATETIME" \
        '[.[] | select(.path != $path)]
         + [{path: $path, repository: $repository, source: $source, branch: $branch, url: $url,
             commit: $commit, build: $build, updatedAt: $updatedAt}]
@@ -122,13 +124,17 @@ main() {
     exit 1
   fi
   SITE_PATH="$REPOSITORY_SLUG/$BRANCH_SLUG"
-  UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  BUILD_DATETIME=${BUILD_DATETIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+  if ! [[ "$BUILD_DATETIME" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    echo "::error::BUILD_DATETIME doit être une date UTC ISO 8601 : $BUILD_DATETIME."
+    exit 1
+  fi
 
   local vMessage
   if [ "$ACTION" = deploy ]; then
     vMessage="Publie $SITE_PATH, build n° $BUILD_NUMBER ($REPOSITORY@${COMMIT_SHA:0:7})"
   else
-    vMessage="Supprime $SITE_PATH (branche $BRANCH de $REPOSITORY supprimée)"
+    vMessage="Supprime $SITE_PATH (branche build/$BRANCH de $REPOSITORY supprimée)"
   fi
 
   local fAttempt

@@ -1,69 +1,118 @@
-name: Publication d'un site
+name: Publication
 
 on:
-  workflow_call:
+  repository_dispatch:
+    types: [deploy, remove]
+  workflow_dispatch:
     inputs:
-      action:
-        description: deploy (publie l'artefact) ou remove (supprime le site de la branche)
-        type: string
-        default: deploy
-      artifact:
-        description: Nom de l'artefact qui contient le site buildé (avec son index.html à la racine)
-        type: string
-        default: site
-      branch:
-        description: Branche du site ; par défaut celle de l'exécution (à donner pour un événement delete)
-        type: string
-        default: ''
-    secrets:
-      PAGES_TOKEN:
+      repository:
+        description: Repo (ex. code-lab)
         required: true
-    outputs:
-      url:
-        description: Adresse du site publié
-        value: ${{ jobs.publish.outputs.url }}
+      branche:
+        description: Branche buildée (sans build/)
+        required: true
+      action:
+        description: Action
+        type: choice
+        options: [publier, supprimer]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.event.client_payload.repository || inputs.repository }}-${{ github.event.client_payload.branch || inputs.branche }}
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    concurrency:
-      group: pages-${{ github.repository }}-${{ inputs.branch || github.ref_name }}
-      cancel-in-progress: false
-    outputs:
-      url: ${{ steps.publish.outputs.url }}
+    timeout-minutes: 10
     env:
-      ACTION: ${{ inputs.action }}
-      BRANCH: ${{ inputs.branch || github.ref_name }}
       PAGES_URL: https://dguillaume17.github.io
-      COMMIT_SHA: ${{ github.sha }}
-      BUILD_NUMBER: ${{ github.run_number }}
     steps:
-      - name: Récupère le site buildé
-        if: inputs.action == 'deploy'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.artifact }}
-          path: ${{ runner.temp }}/site
+      - name: Paramètres
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          PAYLOAD_REPOSITORY: ${{ github.event.client_payload.repository }}
+          PAYLOAD_BRANCH: ${{ github.event.client_payload.branch }}
+          INPUT_REPOSITORY: ${{ inputs.repository }}
+          INPUT_BRANCH: ${{ inputs.branche }}
+          INPUT_ACTION: ${{ inputs.action }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then
+            vAction=$EVENT_ACTION
+            vRepository=$PAYLOAD_REPOSITORY
+            vBranch=$PAYLOAD_BRANCH
+          else
+            vAction=deploy
+            [ "$INPUT_ACTION" = supprimer ] && vAction=remove
+            vRepository=$GITHUB_REPOSITORY_OWNER/${INPUT_REPOSITORY##*/}
+            vBranch=$INPUT_BRANCH
+          fi
+          vBranch=${vBranch#build/}
+          if ! [[ "$vRepository" =~ ^$GITHUB_REPOSITORY_OWNER/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Repo refusé : $vRepository (seulement ceux de $GITHUB_REPOSITORY_OWNER)."
+            exit 1
+          fi
+          if [ -z "$vBranch" ] || [[ "$vBranch" == *$'\n'* ]] || ! git check-ref-format "refs/heads/build/$vBranch"; then
+            echo "::error::Nom de branche invalide : $vBranch."
+            exit 1
+          fi
+          {
+            echo "ACTION=$vAction"
+            echo "REPOSITORY=$vRepository"
+            echo "BRANCH=$vBranch"
+          } >> "$GITHUB_ENV"
 
       - name: Clone dguillaume17.github.io
         uses: actions/checkout@v4
         with:
-          repository: dguillaume17/dguillaume17.github.io
           ref: main
-          token: ${{ secrets.PAGES_TOKEN }}
           path: pages
 
-      - name: Branches existantes du repo
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Récupère build/${{ env.BRANCH }} de ${{ env.REPOSITORY }}
+        if: env.ACTION == 'deploy'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REPOSITORY }}
+          ref: refs/heads/build/${{ env.BRANCH }}
+          token: ${{ secrets.SOURCES_TOKEN || github.token }}
+          path: site
+          persist-credentials: false
+
+      - name: Informations du build
+        if: env.ACTION == 'deploy'
+        working-directory: site
         run: |
-          if ! gh api "repos/$GITHUB_REPOSITORY/branches" --paginate --jq '.[].name' > "$RUNNER_TEMP/branches.txt"; then
+          if [ ! -f .build.json ]; then
+            echo "::error::Pas de .build.json dans build/$BRANCH : branche à reconstruire avec le workflow Build du repo."
+            exit 1
+          fi
+          vNumber=$(jq -r '.buildNumber' .build.json)
+          vCommit=$(jq -r '.commit' .build.json)
+          vDatetime=$(jq -r '.buildDatetime' .build.json)
+          if ! [[ "$vNumber" =~ ^[0-9]+$ && "$vCommit" =~ ^[0-9a-f]{40}$ && "$vDatetime" =~ ^[0-9T:Z-]+$ ]]; then
+            echo "::error::.build.json invalide."
+            exit 1
+          fi
+          {
+            echo "BUILD_NUMBER=$vNumber"
+            echo "COMMIT_SHA=$vCommit"
+            echo "BUILD_DATETIME=$vDatetime"
+          } >> "$GITHUB_ENV"
+          rm -rf .git .build.json
+
+      - name: Branches buildées du repo
+        env:
+          GH_TOKEN: ${{ secrets.SOURCES_TOKEN || github.token }}
+        run: |
+          if gh api "repos/$REPOSITORY/branches" --paginate --jq '.[].name' > "$RUNNER_TEMP/all-branches.txt"; then
+            sed -n 's|^build/||p' "$RUNNER_TEMP/all-branches.txt" > "$RUNNER_TEMP/branches.txt"
+          else
             echo "::warning::Liste des branches indisponible : pas de nettoyage des sites des branches supprimées."
-            rm -f "$RUNNER_TEMP/branches.txt"
           fi
 
       - name: Publie
-        id: publish
         working-directory: pages
         run: |
           git config user.name "github-actions[bot]"
@@ -71,4 +120,4 @@ jobs:
           if [ -s "$RUNNER_TEMP/branches.txt" ]; then
             export EXISTING_BRANCHES_FILE="$RUNNER_TEMP/branches.txt"
           fi
-          .github/scripts/publish.sh "$ACTION" "$GITHUB_REPOSITORY" "$BRANCH" "$RUNNER_TEMP/site"
+          .github/scripts/publish.sh "$ACTION" "$REPOSITORY" "$BRANCH" "$GITHUB_WORKSPACE/site"

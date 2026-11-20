@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Lists the sites published by .github/workflows/publish.yml, read from sites.json (one entry per repository and branch). -->
+<!-- Lists the sites published by .github/workflows/publish.yml, read from sites.json (one entry per repository and built branch). -->
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
@@ -112,7 +112,7 @@
   <body>
     <main>
       <h1>Sites publiés</h1>
-      <p class="intro">Un site par repo et par branche, publié automatiquement à chaque push et supprimé avec sa branche.</p>
+      <p class="intro">Un site par repo et par branche buildée : publié par le workflow <em>Build</em> du repo, supprimé avec sa branche <code>build/…</code>.</p>
       <div id="sites"><p class="status">Chargement…</p></div>
     </main>
     <script>
