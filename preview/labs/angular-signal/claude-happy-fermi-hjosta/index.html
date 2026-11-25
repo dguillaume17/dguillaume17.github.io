@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en" data-beasties-container>
+  <head>
+    <meta charset="utf-8">
+    <title>AngularSignal</title>
+    <base href="/preview/labs/angular-signal/claude-happy-fermi-hjosta/">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles-5INURTSO.css"><meta name="build-number" content="20261125.104555">
+<meta name="build-date" content="2026-11-25T10:45:55Z">
+<meta name="build-branch" content="claude/happy-fermi-hjosta">
+<script data-build-info="/preview/labs/angular-signal/claude-happy-fermi-hjosta/build-info.json">
+// Injected inline into every deployed index.html by inject.sh.
+// - Reloads the page once when a newer build is deployed.
+// - Shows a floating banner with the build number and date when the URL has ?banner=1.
+(() => {
+  const script = document.currentScript;
+  const infoUrl = script.dataset.buildInfo;
+  const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content ?? "";
+  const buildNumber = meta("build-number");
+  const buildDate = meta("build-date");
+  const buildBranch = meta("build-branch");
+
+  // Remove the cache-busting parameter added by a reload.
+  const url = new URL(location.href);
+  if (url.searchParams.has("_v")) {
+    url.searchParams.delete("_v");
+    history.replaceState(history.state, "", url);
+  }
+
+  // ?banner=1 shows the banner, ?banner=0 hides it. The choice is kept for the tab.
+  const bannerParam = url.searchParams.get("banner");
+  if (bannerParam !== null) sessionStorage.setItem("banner", bannerParam);
+  if (sessionStorage.getItem("banner") === "1") {
+    document.addEventListener("DOMContentLoaded", showBanner);
+  }
+
+  async function checkVersion() {
+    try {
+      const response = await fetch(`${infoUrl}?t=${Date.now()}`, { cache: "no-store" });
+      const info = await response.json();
+      if (info.buildNumber === buildNumber) return;
+      // Reload only once per new build, to avoid a loop if a cache still serves the old page.
+      // All sites share the same origin, so the key includes the site path.
+      const reloadKey = `reloadedFor:${infoUrl}`;
+      if (sessionStorage.getItem(reloadKey) === info.buildNumber) return;
+      sessionStorage.setItem(reloadKey, info.buildNumber);
+      const reloadUrl = new URL(location.href);
+      reloadUrl.searchParams.set("_v", Date.now());
+      location.replace(reloadUrl);
+    } catch {
+      // Offline or no build-info.json: keep the current page.
+    }
+  }
+
+  function showBanner() {
+    const host = document.createElement("div");
+    const shadow = host.attachShadow({ mode: "open" });
+    const date = new Date(buildDate).toLocaleString();
+    const branch = buildBranch === "main" ? "" : ` · ${buildBranch}`;
+    shadow.innerHTML = `
+      <style>
+        div {
+          position: fixed; right: 8px; bottom: 8px; z-index: 2147483647;
+          padding: 4px 8px; border-radius: 4px;
+          font: 12px/1.4 system-ui, sans-serif; color: #fff;
+          background: ${branch ? "rgba(180, 83, 9, 0.85)" : "rgba(17, 24, 39, 0.75)"};
+          cursor: pointer; user-select: none;
+        }
+      </style>
+      <div title="Click to hide">#${buildNumber} · ${date}${branch}</div>`;
+    shadow.querySelector("div").addEventListener("click", () => host.remove());
+    document.body.append(host);
+  }
+
+  checkVersion();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkVersion();
+  });
+})();
+</script>
+</head>
+  <body>
+    <app-root></app-root>
+  <script src="main-HE4ADFPQ.js" type="module"></script></body>
+</html>
