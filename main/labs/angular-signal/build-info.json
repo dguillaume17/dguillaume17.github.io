@@ -1,0 +1,14 @@
+{
+  "name": "angular-signal",
+  "kind": "lab",
+  "stacks": [
+    "typescript",
+    "angular"
+  ],
+  "buildNumber": "20261125.105301",
+  "buildDate": "2026-11-25T10:53:01Z",
+  "branch": "main",
+  "sha": "bf7b0da",
+  "path": "main/labs/angular-signal",
+  "source": "9ea726788c20-9927fa5398c2"
+}

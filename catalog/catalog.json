@@ -6,11 +6,11 @@
       "typescript",
       "angular"
     ],
-    "buildNumber": "20261125.104555",
-    "buildDate": "2026-11-25T10:45:55Z",
-    "branch": "claude/happy-fermi-hjosta",
-    "sha": "4c617b2",
-    "path": "preview/labs/angular-signal/claude-happy-fermi-hjosta",
+    "buildNumber": "20261125.105301",
+    "buildDate": "2026-11-25T10:53:01Z",
+    "branch": "main",
+    "sha": "bf7b0da",
+    "path": "main/labs/angular-signal",
     "source": "9ea726788c20-9927fa5398c2"
   }
 ]
