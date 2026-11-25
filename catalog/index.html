@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Catalog</title>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --accent: #2563eb;
+        --preview: #b45309;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f172a;
+          --card: #1e293b;
+          --text: #e2e8f0;
+          --muted: #94a3b8;
+          --border: #334155;
+          --accent: #60a5fa;
+          --preview: #f59e0b;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 system-ui, sans-serif;
+      }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        flex: 1;
+      }
+      h2 {
+        margin: 32px 0 12px;
+        font-size: 16px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      input[type="search"] {
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--text);
+        font: inherit;
+      }
+      label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        cursor: pointer;
+      }
+      .card {
+        padding: 12px 16px;
+        margin-bottom: 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--card);
+      }
+      .title {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .name {
+        font-weight: 600;
+      }
+      .stacks,
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        align-items: baseline;
+        margin-top: 4px;
+      }
+      a {
+        color: var(--accent);
+      }
+      a.preview {
+        color: var(--preview);
+      }
+      .empty {
+        color: var(--muted);
+      }
+    </style>
+  <meta name="build-number" content="null">
+<meta name="build-date" content="null">
+<meta name="build-branch" content="main">
+<script data-build-info="/catalog/build-info.json">
+// Injected inline into every deployed index.html by inject.sh.
+// - Reloads the page once when a newer build is deployed.
+// - Shows a floating banner with the build number and date when the URL has ?banner=1.
+(() => {
+  const script = document.currentScript;
+  const infoUrl = script.dataset.buildInfo;
+  const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content ?? "";
+  const buildNumber = meta("build-number");
+  const buildDate = meta("build-date");
+  const buildBranch = meta("build-branch");
+
+  // Remove the cache-busting parameter added by a reload.
+  const url = new URL(location.href);
+  if (url.searchParams.has("_v")) {
+    url.searchParams.delete("_v");
+    history.replaceState(history.state, "", url);
+  }
+
+  // ?banner=1 shows the banner, ?banner=0 hides it. The choice is kept for the tab.
+  const bannerParam = url.searchParams.get("banner");
+  if (bannerParam !== null) sessionStorage.setItem("banner", bannerParam);
+  if (sessionStorage.getItem("banner") === "1") {
+    document.addEventListener("DOMContentLoaded", showBanner);
+  }
+
+  async function checkVersion() {
+    try {
+      const response = await fetch(`${infoUrl}?t=${Date.now()}`, { cache: "no-store" });
+      const info = await response.json();
+      if (info.buildNumber === buildNumber) return;
+      // Reload only once per new build, to avoid a loop if a cache still serves the old page.
+      // All sites share the same origin, so the key includes the site path.
+      const reloadKey = `reloadedFor:${infoUrl}`;
+      if (sessionStorage.getItem(reloadKey) === info.buildNumber) return;
+      sessionStorage.setItem(reloadKey, info.buildNumber);
+      const reloadUrl = new URL(location.href);
+      reloadUrl.searchParams.set("_v", Date.now());
+      location.replace(reloadUrl);
+    } catch {
+      // Offline or no build-info.json: keep the current page.
+    }
+  }
+
+  function showBanner() {
+    const host = document.createElement("div");
+    const shadow = host.attachShadow({ mode: "open" });
+    const date = new Date(buildDate).toLocaleString();
+    const branch = buildBranch === "main" ? "" : ` · ${buildBranch}`;
+    shadow.innerHTML = `
+      <style>
+        div {
+          position: fixed; right: 8px; bottom: 8px; z-index: 2147483647;
+          padding: 4px 8px; border-radius: 4px;
+          font: 12px/1.4 system-ui, sans-serif; color: #fff;
+          background: ${branch ? "rgba(180, 83, 9, 0.85)" : "rgba(17, 24, 39, 0.75)"};
+          cursor: pointer; user-select: none;
+        }
+      </style>
+      <div title="Click to hide">#${buildNumber} · ${date}${branch}</div>`;
+    shadow.querySelector("div").addEventListener("click", () => host.remove());
+    document.body.append(host);
+  }
+
+  checkVersion();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkVersion();
+  });
+})();
+</script>
+</head>
+  <body>
+    <main>
+      <header>
+        <h1>Catalog</h1>
+        <input type="search" id="filter" placeholder="Filter" aria-label="Filter" />
+        <label><input type="checkbox" id="banner" /> Show build banner</label>
+      </header>
+      <div id="list"></div>
+    </main>
+
+    <script>
+      const list = document.getElementById("list");
+      const filter = document.getElementById("filter");
+      const banner = document.getElementById("banner");
+      let sites = [];
+
+      // Remember the banner choice. Storage can be unavailable (private mode).
+      try {
+        banner.checked = localStorage.getItem("catalog-banner") === "1";
+      } catch {}
+
+      const escape = (text) =>
+        String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+      const date = (iso) => new Date(iso).toLocaleString();
+      const link = (site, label, className = "") =>
+        `<a class="${className}" href="/${escape(site.path)}/${banner.checked ? "?banner=1" : "?banner=0"}">${escape(label)}</a>`;
+
+      function render() {
+        const query = filter.value.trim().toLowerCase();
+        const workspaces = new Map();
+        for (const site of sites) {
+          const key = `${site.kind}/${site.name}`;
+          if (query && !`${key} ${site.stacks.join(" ")} ${site.branch}`.toLowerCase().includes(query)) continue;
+          if (!workspaces.has(key)) workspaces.set(key, { ...site, main: null, previews: [] });
+          const workspace = workspaces.get(key);
+          if (site.branch === "main") workspace.main = site;
+          else workspace.previews.push(site);
+        }
+
+        let html = "";
+        for (const [kind, title] of [
+          ["project", "Projects"],
+          ["lab", "Labs"],
+        ]) {
+          const items = [...workspaces.values()].filter((w) => w.kind === kind);
+          items.sort((a, b) => a.name.localeCompare(b.name));
+          html += `<h2>${title}</h2>`;
+          if (items.length === 0) html += `<p class="empty">None</p>`;
+          for (const w of items) {
+            html += `<div class="card">
+              <div class="title"><span class="name">${escape(w.name)}</span><span class="stacks">${escape(w.stacks.join(", "))}</span></div>`;
+            if (w.main) {
+              html += `<div class="row">${link(w.main, "main")}
+                <span class="meta">#${escape(w.main.buildNumber)} · ${date(w.main.buildDate)}</span></div>`;
+            }
+            for (const p of w.previews.sort((a, b) => b.buildDate.localeCompare(a.buildDate))) {
+              html += `<div class="row">${link(p, `preview: ${p.branch}`, "preview")}
+                <span class="meta">#${escape(p.buildNumber)} · ${date(p.buildDate)}</span></div>`;
+            }
+            html += `</div>`;
+          }
+        }
+        list.innerHTML = html;
+      }
+
+      filter.addEventListener("input", render);
+      banner.addEventListener("change", () => {
+        try {
+          localStorage.setItem("catalog-banner", banner.checked ? "1" : "0");
+        } catch {}
+        render();
+      });
+
+      fetch(`catalog.json?t=${Date.now()}`, { cache: "no-store" })
+        .then((response) => response.json())
+        .then((data) => {
+          sites = data;
+          render();
+        })
+        .catch(() => {
+          list.innerHTML = `<p class="empty">Cannot load catalog.json</p>`;
+        });
+    </script>
+  </body>
+</html>
